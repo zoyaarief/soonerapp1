@@ -20,7 +20,7 @@ export async function connectToDb() {
   await client.connect();
   db = client.db(dbName);
 
-  // Ensure useful indexes (unique email on owners)
+  // Useful index: unique email for owners
   await db.collection("owners").createIndex({ email: 1 }, { unique: true });
 
   return db;
