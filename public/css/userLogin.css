@@ -1,0 +1,74 @@
+body {
+  font-family: "Inter", sans-serif;
+  background: linear-gradient(135deg, #ece9e6, #ffffff);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.signup-container {
+  background: #ffffff;
+  padding: 2.5rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  width: 360px;
+  text-align: center;
+}
+
+h1 {
+  font-weight: 600;
+  font-size: 1.6rem;
+  margin-bottom: 1.5rem;
+  color: #222;
+}
+
+form input {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  transition: border-color 0.3s ease;
+}
+
+form input:focus {
+  border-color: #0077ff;
+  outline: none;
+}
+
+button {
+  width: 100%;
+  padding: 0.9rem;
+  background: #0077ff;
+  border: none;
+  color: #fff;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+button:hover {
+  background: #005fcc;
+}
+
+.note {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.note a {
+  color: #0077ff;
+  text-decoration: none;
+}
+
+#message {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+#message.success {
+  color: green;
+}

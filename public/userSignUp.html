@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sooner | User Signup</title>
+    <link rel="stylesheet" href="./css/userSignUp.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <section class="signup-container">
+      <h1>Join Sooner</h1>
+      <form id="userSignupForm">
+        <input type="text" id="name" placeholder="Full Name" required />
+        <input type="tel" id="phone" placeholder="Phone Number" required />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="text" id="username" placeholder="Username" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <button type="submit">Create Account</button>
+      </form>
+      <p class="note">Already have an account? <a href="userLogin.html">Login</a></p>
+      <div id="message"></div>
+    </section>
+    <script type="module" src="./js/userSignUp.js"></script>
+  </body>
+</html>
