@@ -14,7 +14,7 @@ const cards = Array.from(document.querySelectorAll(".card"));
 let index = 0;
 let timerId;
 
-// cross-fade background
+// Cross-fade background
 function setBackground(src) {
   const layer = document.createElement("div");
   layer.className = "hero__bg";
@@ -31,6 +31,7 @@ function setBackground(src) {
   }, 800);
 }
 
+// Progress Bar + Slide Indicator
 function updateProgress() {
   const pct = ((index + 1) / IMAGES.length) * 100;
   progressBar.style.width = pct + "%";
@@ -51,19 +52,29 @@ function stop() {
   if (timerId) clearInterval(timerId);
 }
 
-// init
+// Init
 setBackground(IMAGES[index]);
 updateProgress();
 start();
 
-// card click sets background + resets timer
-cards.forEach((c) => {
-  c.addEventListener("click", () => {
-    const to = c.getAttribute("data-bg");
-    const i = IMAGES.findIndex((p) => p === to);
-    if (i !== -1) index = i;
-    setBackground(to);
-    updateProgress();
-    start();
+// Card click logic
+cards.forEach((card) => {
+  card.addEventListener("click", () => {
+    const bg = card.getAttribute("data-bg");
+    const type = card.getAttribute("data-type");
+
+    // Change background image + progress state
+    if (bg) {
+      const i = IMAGES.findIndex((p) => p === bg);
+      if (i !== -1) index = i;
+      setBackground(bg);
+      updateProgress();
+      start();
+    }
+
+    // Redirect to Browse page if type is provided
+    if (type) {
+      window.location.href = `browse.html?type=${encodeURIComponent(type)}`;
+    }
   });
 });
