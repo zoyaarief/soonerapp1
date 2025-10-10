@@ -3,78 +3,42 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sooner | Owner Dashboard</title>
-
+    <title>Sooner | Owner Signup</title>
+    <link rel="stylesheet" href="./css/ownerSignup.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./css/ownerDashboard.css" />
   </head>
-
   <body>
-    <!-- NAVBAR -->
-    <nav class="navbar">
-      <div class="logo">Sooner</div>
-      <div class="user-info">
-        <span id="businessName">Business Name</span>
-        <img
-          src="./images/default_profile.png"
-          alt="Profile"
-          class="profile-icon"
+    <section class="signup-container">
+      <h1>Sooner for Business</h1>
+      <form id="ownerSignupForm">
+        <input
+          type="text"
+          id="managerName"
+          placeholder="Manager Name"
+          required
         />
-      </div>
-    </nav>
-
-    <!-- DASHBOARD MAIN -->
-    <main class="dashboard">
-      <section class="controls">
-        <h2>Controls</h2>
-        <div class="toggle-buttons">
-          <button id="walkinBtn" class="btn enable">Enable Walk-ins</button>
-          <button id="openCloseBtn" class="btn">Open</button>
-          <button id="announceBtn" class="btn">Add Announcement</button>
-        </div>
-
-        <textarea
-          id="announcementInput"
-          placeholder="Type announcement or offer..."
-          class="hidden"
-        ></textarea>
-      </section>
-
-      <!-- QUEUE SECTION -->
-      <section class="queue-section">
-        <h2>Current Queue</h2>
-        <div id="queueList" class="queue-list"></div>
-        <div class="queue-actions">
-          <button id="undoBtn" class="btn secondary">Undo</button>
-          <button id="stopQueueBtn" class="btn danger">Stop Queue</button>
-          <button id="restartQueueBtn" class="btn hidden">Restart Queue</button>
-        </div>
-      </section>
-
-      <!-- STATS SECTION -->
-      <section class="stats-section">
-        <h2>Restaurant Stats</h2>
-        <div class="stats-cards">
-          <div class="card">
-            <h3>❤️ Likes</h3>
-            <p id="likesCount">42</p>
-          </div>
-          <div class="card">
-            <h3>✅ Served Today</h3>
-            <p id="servedCount">18</p>
-          </div>
-          <div class="card">
-            <h3>📊 Queue Avg Wait</h3>
-            <p id="avgWait">30 mins</p>
-          </div>
-        </div>
-        <canvas id="chart"></canvas>
-      </section>
-    </main>
-
-    <script type="module" src="./js/ownerDashboard.js"></script>
+        <input
+          type="text"
+          id="businessName"
+          placeholder="Business Name"
+          required
+        />
+        <input
+          type="text"
+          id="type"
+          placeholder="Type of Business (Restaurant, Salon…)"
+        />
+        <input type="tel" id="phone" placeholder="Phone Number" />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <button type="submit">Create Account</button>
+      </form>
+      <p class="note">Already registered? <a href="#">Login</a></p>
+      <div id="message"></div>
+    </section>
+    <script type="module" src="./js/ownerSignup.js"></script>
   </body>
 </html>

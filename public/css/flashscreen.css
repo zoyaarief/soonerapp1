@@ -4,19 +4,29 @@
   --text: #ffffff;
   --muted: #e7e7e7;
   --accent: #ffdf9b;
+
+  /* spacing + max line width for readability */
+  --space: 1rem;
+  --maxw: 72ch;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
+
 html,
 body {
   height: 100%;
 }
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
 body {
-  /* Thinner, classier body font */
   font-family:
     "Plus Jakarta Sans",
     system-ui,
@@ -27,23 +37,28 @@ body {
     sans-serif;
   background: #000;
   color: var(--text);
-  overflow: hidden;
-  font-size: 14px; /* smaller base everywhere (except headline) */
+  overflow: hidden; /* switches to auto on <960px below */
+  font-size: 14px;
   letter-spacing: 0.1px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* BACKGROUND */
 .hero {
   position: relative;
-  height: 100vh;
+  height: 100svh; /* better on mobile than 100vh */
   width: 100vw;
+  min-height: 480px;
+  isolation: isolate; /* keeps overlay effects contained */
 }
 .hero__bg {
   position: absolute;
   inset: 0;
-  background: center/cover no-repeat;
+  background: center / cover no-repeat;
   filter: saturate(1.05) contrast(1.05);
   transition: opacity 0.8s ease;
+  will-change: opacity;
 }
 .hero__overlay {
   position: absolute;
@@ -54,23 +69,28 @@ body {
     rgba(0, 0, 0, 0.6) 55%,
     rgba(0, 0, 0, 0.7)
   );
+  pointer-events: none;
 }
 
-/* TOPBAR (smaller + thinner) */
+/* TOPBAR */
 .topbar {
   position: absolute;
-  top: 16px;
-  left: 18px;
-  right: 18px;
+  top: max(16px, env(safe-area-inset-top));
+  left: max(18px, env(safe-area-inset-left));
+  right: max(18px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
   z-index: 2;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;
   font-size: 13px;
   opacity: 0.95;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 .cta {
   all: unset;
@@ -81,15 +101,17 @@ body {
   cursor: pointer;
   font-weight: 600;
   font-size: 12px;
+  line-height: 1;
 }
 
-/* HEADLINE (kept bold/large) */
+/* HEADLINE */
 .headline {
   position: absolute;
   z-index: 2;
-  left: 8vw;
-  top: 22vh;
-  max-width: 900px;
+  left: 6vw;
+  right: 6vw; /* allow fluid wrap on small screens */
+  top: clamp(12vh, 18vh, 22vh);
+  max-width: min(var(--maxw), 900px);
 }
 .pill {
   display: inline-block;
@@ -100,13 +122,15 @@ body {
   border-radius: 999px;
   margin-bottom: 1rem;
   font-size: 12px;
+  line-height: 1;
 }
 .headline h1 {
-  font-family: "Poppins", sans-serif; /* stronger display feel */
-  font-size: clamp(2.6rem, 6vw, 5rem);
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(2.2rem, 6vw, 5rem);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.07;
   letter-spacing: 0.2px;
+  word-wrap: break-word;
 }
 .headline .light {
   font-weight: 300;
@@ -116,12 +140,12 @@ body {
   color: var(--accent);
 }
 
-/* LEFT CARD (shrunk typography) */
+/* LEFT CARD */
 .leftcard {
   position: absolute;
   left: 6vw;
   bottom: 9vh;
-  width: min(360px, 86vw);
+  width: min(380px, 86vw);
   z-index: 2;
 }
 .glass {
@@ -151,6 +175,7 @@ body {
   border-radius: 50%;
   border: 2px solid #fff;
   margin-right: -8px;
+  object-fit: cover;
 }
 .more {
   background: #222;
@@ -186,12 +211,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  line-height: 1;
 }
 .arrow {
   font-size: 0.95rem;
 }
 
-/* STRIP (smaller card typography) */
+/* STRIP */
 .strip {
   position: absolute;
   right: 6vw;
@@ -203,8 +229,9 @@ body {
   flex-wrap: nowrap;
 }
 .card {
+  /* switch to aspect ratio so images never stretch */
+  aspect-ratio: 7 / 10; /* ~168x240 */
   width: 168px;
-  height: 240px;
   border-radius: 24px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
@@ -214,26 +241,27 @@ body {
   transition:
     transform 0.25s ease,
     opacity 0.25s;
+  will-change: transform;
 }
 .card img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: cover; /* keeps same visual crop across sizes */
   display: block;
 }
 .card:hover {
   transform: translateY(-6px);
 }
 .card--main {
+  aspect-ratio: 15 / 12; /* ~300x240 */
   width: 300px;
-  height: 240px;
   position: relative;
 }
 .card__text {
   position: absolute;
   left: 14px;
-  bottom: 14px;
   right: 14px;
+  bottom: 14px;
   color: #fff;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
 }
@@ -278,7 +306,9 @@ body {
   font-size: 12px;
 }
 
-/* RESPONSIVE */
+/* ===== RESPONSIVE ===== */
+
+/* tighten layout just before tablet */
 @media (max-width: 1120px) {
   .strip {
     right: 5vw;
@@ -287,24 +317,42 @@ body {
     left: 6vw;
   }
 }
+
+/* tablet & down */
 @media (max-width: 960px) {
   body {
     overflow: auto;
-  }
+  } /* allow page scroll */
   .headline {
     left: 6vw;
-    top: 14vh;
-    max-width: 82vw;
+    right: 6vw;
+    top: 12vh;
+    max-width: 86vw;
   }
+
+  /* turn the strip into a swipeable row */
   .strip {
     position: static;
     margin: 8vh auto 5vh;
-    justify-content: center;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 0.85rem;
+    padding: 0 6vw;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
   }
+  .card {
+    scroll-snap-align: start;
+  }
+  .card--main {
+    flex: 0 0 auto;
+  }
+
   .leftcard {
     position: static;
     margin: 2vh auto 0;
+    padding: 0 6vw;
   }
   .progress {
     position: sticky;
@@ -320,17 +368,46 @@ body {
     display: block;
   }
 }
+
+/* phones */
 @media (max-width: 640px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar .brand {
+    font-size: 12px;
+    max-width: 60vw;
+  }
+  .cta {
+    font-size: 11.5px;
+    padding: 0.5rem 0.8rem;
+  }
+
+  .pill {
+    font-size: 11.5px;
+    margin-bottom: 0.75rem;
+  }
+  .headline h1 {
+    font-size: clamp(2rem, 9vw, 2.6rem);
+    line-height: 1.08;
+  }
+  .headline {
+    top: 10vh;
+  }
+
   .card {
     width: 44vw;
     max-width: 190px;
-    height: 200px;
+    aspect-ratio: 7 / 10;
+    height: auto; /* height derives from aspect-ratio */
   }
   .card--main {
     width: 92vw;
     max-width: 360px;
-    height: 220px;
+    aspect-ratio: 15 / 12;
+    height: auto;
   }
+
   .leftcard h3 {
     font-size: 14px;
   }
@@ -340,10 +417,44 @@ body {
   .btn-primary {
     font-size: 11.5px;
   }
-  .topbar .brand {
-    font-size: 12px;
+}
+
+/* very small devices / narrow landscape */
+@media (max-height: 540px) and (orientation: landscape) {
+  .headline {
+    top: 8vh;
   }
+  .leftcard {
+    bottom: 6vh;
+  }
+  .strip {
+    bottom: 6vh;
+  }
+  .progress {
+    bottom: 2vh;
+  }
+  .counter {
+    bottom: 2.2vh;
+  }
+}
+
+/* accessibility: reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .hero__bg,
+  .card,
+  .progress__bar {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* touch feedback */
+@media (hover: none) and (pointer: coarse) {
+  .card:hover {
+    transform: none;
+  }
+  .btn-primary,
   .cta {
-    font-size: 11.5px;
-  }
+    padding: 0.7rem 1rem;
+  } /* bigger tap targets on phones */
 }
