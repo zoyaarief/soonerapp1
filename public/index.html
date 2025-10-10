@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner — Flashscreen</title>
+
+    <!-- Headline keeps bold impact (Poppins). Body uses thin, classy Plus Jakarta Sans -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/flashscreen.css" />
+  </head>
+  <body>
+    <section class="hero" id="hero">
+      <div class="hero__bg" id="heroBg"></div>
+      <div class="hero__overlay"></div>
+
+      <!-- Minimal top bar -->
+      <div class="topbar">
+        <div class="brand">About Sooner</div>
+        <button class="cta" onclick="location.href='ownerSignup.html'">
+          Login/Sign Up
+        </button>
+      </div>
+
+      <!-- Center headline (sizes unchanged per your request) -->
+      <div class="headline">
+        <h1>
+          Queue Less <span class="light">Do More</span><br />
+          with <em class="accent">Sooner</em>
+        </h1>
+      </div>
+
+      <!-- Left info card (now thinner + smaller) -->
+      <aside class="leftcard glass">
+        <h3>No More Waiting</h3>
+        <div class="joined">
+          <div class="avatars">
+            <img src="https://i.pravatar.cc/40?img=1" alt="" />
+            <img src="https://i.pravatar.cc/40?img=2" alt="" />
+            <img src="https://i.pravatar.cc/40?img=3" alt="" />
+            <span class="more">+32</span>
+          </div>
+          <span class="small">People Joined</span>
+        </div>
+
+        <p class="muted">
+          From “How long?” to “You’re up next” — live queues for local services.
+        </p>
+
+        <button class="btn-primary">
+          Discover More
+          <span class="arrow">↗</span>
+        </button>
+      </aside>
+
+      <!-- Four cards -->
+      <div class="strip">
+        <div class="card card--main" data-bg="./images/restaurant.jpg">
+          <img src="./images/clinic2.jpg" alt="Clinics" />
+          <div class="card__text">
+            <h4>Clinics</h4>
+            <p>
+              Check in remotely, view live queue updates, and arrive when you’re
+              nearly next.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" data-bg="./images/restaurant.jpg">
+          <img src="./images/restaurant2.jpg" alt="Restaurants" />
+          <div class="card__text">
+            <h4>Restaurants</h4>
+            <p>Join early, track spot, get seated.</p>
+          </div>
+        </div>
+
+        <div class="card" data-bg="./images/salon.jpg">
+          <img src="./images/salon2.jpg" alt="Salons" />
+          <div class="card__text">
+            <h4>Salons</h4>
+            <p>Hold your place, arrive right on time.</p>
+          </div>
+        </div>
+
+        <div class="card" data-bg="./images/party.jpg">
+          <img src="./images/party2.jpg" alt="Events" />
+          <div class="card__text">
+            <h4>Events</h4>
+            <p>Secure entry, skip the line.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress + counter -->
+      <div class="progress">
+        <div class="progress__bar" id="progressBar"></div>
+      </div>
+      <div class="counter"><span id="slideNum">01</span>/<span>04</span></div>
+    </section>
+
+    <script type="module" src="./js/flashscreen.js"></script>
+  </body>
+</html>

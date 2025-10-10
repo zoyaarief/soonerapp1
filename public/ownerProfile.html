@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner | Owner Profile</title>
+
+    <!-- Fonts: body (Plus Jakarta), display (Poppins) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/ownerProfile.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <!-- SIDENAV -->
+      <aside class="sidenav">
+        <div class="brand">Sooner</div>
+        <nav>
+          <a href="#overview" class="navlink active">Overview</a>
+          <a href="#media" class="navlink">Media</a>
+          <a href="#details" class="navlink">Details</a>
+          <a href="#hours" class="navlink">Hours</a>
+          <a href="#settings" class="navlink">Settings</a>
+        </nav>
+        <div class="userchip">
+          <img src="./images/default_profile.png" alt="" />
+          <span id="businessName">Business Name</span>
+        </div>
+      </aside>
+
+      <!-- MAIN -->
+      <main class="main">
+        <!-- TOPBAR -->
+        <header class="topbar">
+          <div class="crumbs">Account / <strong>Profile</strong></div>
+          <button id="goDashboardBtn" class="btn btn--ghost">
+            Go to Dashboard →
+          </button>
+        </header>
+
+        <!-- OVERVIEW -->
+        <section id="overview" class="card">
+          <div class="card__header">
+            <h2>Business Overview</h2>
+          </div>
+          <div class="overview__grid">
+            <div class="profile">
+              <div class="avatar">
+                <img
+                  id="avatarPreview"
+                  src="./images/default_profile.png"
+                  alt="Avatar"
+                />
+              </div>
+              <label class="filebtn">
+                Change Logo
+                <input id="avatarInput" type="file" accept="image/*" />
+              </label>
+            </div>
+
+            <form id="profileForm" class="form">
+              <div class="form__row">
+                <label>Business Name</label>
+                <input
+                  name="displayName"
+                  id="displayName"
+                  placeholder="Sooner Place"
+                />
+              </div>
+
+              <div class="form__row">
+                <label>Description</label>
+                <textarea
+                  name="description"
+                  id="description"
+                  rows="3"
+                  placeholder="Short description"
+                ></textarea>
+              </div>
+
+              <div class="form__grid">
+                <div class="form__row">
+                  <label>Cuisine / Type</label>
+                  <input
+                    name="cuisine"
+                    id="cuisine"
+                    placeholder="Italian / Salon / Clinic..."
+                  />
+                </div>
+                <div class="form__row">
+                  <label>Approx Price</label>
+                  <input
+                    name="approxPrice"
+                    id="approxPrice"
+                    placeholder="2 people · $100"
+                  />
+                </div>
+                <div class="form__row">
+                  <label>Avg Wait (mins)</label>
+                  <input
+                    name="waitTime"
+                    id="waitTime"
+                    type="number"
+                    min="0"
+                    placeholder="30"
+                  />
+                </div>
+                <div class="form__row">
+                  <label>Total Seats</label>
+                  <input
+                    name="totalSeats"
+                    id="totalSeats"
+                    type="number"
+                    min="0"
+                    placeholder="60"
+                  />
+                </div>
+                <div class="form__row">
+                  <label>Max per Booking</label>
+                  <input
+                    name="maxBooking"
+                    id="maxBooking"
+                    type="number"
+                    min="1"
+                    placeholder="6"
+                  />
+                </div>
+                <div class="form__row">
+                  <label>Location</label>
+                  <input
+                    name="location"
+                    id="location"
+                    placeholder="City, Country"
+                  />
+                </div>
+              </div>
+
+              <div class="buttonrow">
+                <button class="btn" type="submit">Save Profile</button>
+                <span id="statusMsg" class="status"></span>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- MEDIA -->
+        <section id="media" class="card">
+          <div class="card__header">
+            <h2>Gallery & Menu</h2>
+            <div class="tiny">
+              Upload multiple images — they’ll be saved locally in your browser.
+            </div>
+          </div>
+
+          <div class="uploadrow">
+            <label class="filebtn">
+              Upload Photos
+              <input id="placeImages" type="file" accept="image/*" multiple />
+            </label>
+
+            <label class="filebtn">
+              Upload Menu Images
+              <input id="menuImages" type="file" accept="image/*" multiple />
+            </label>
+          </div>
+
+          <div class="masonry" id="galleryGrid"></div>
+        </section>
+
+        <!-- DETAILS -->
+        <section id="details" class="card">
+          <div class="card__header"><h2>Extra Details</h2></div>
+          <div class="form__row">
+            <label>Extra Features</label>
+            <input
+              id="features"
+              placeholder="Outdoor seating, wheelchair access, live music..."
+            />
+          </div>
+        </section>
+
+        <!-- HOURS -->
+        <section id="hours" class="card">
+          <div class="card__header"><h2>Hours</h2></div>
+          <div class="form__grid">
+            <div class="form__row">
+              <label>Open Time</label>
+              <input id="openTime" placeholder="10:00 AM" />
+            </div>
+            <div class="form__row">
+              <label>Close Time</label>
+              <input id="closeTime" placeholder="11:00 PM" />
+            </div>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="settings" class="card">
+          <div class="card__header"><h2>Settings</h2></div>
+          <div class="buttonrow">
+            <button class="btn btn--ghost" id="clearGallery">
+              Clear Gallery
+            </button>
+            <button class="btn btn--ghost" id="clearProfile">
+              Reset Profile
+            </button>
+          </div>
+        </section>
+
+        <footer class="footnote">
+          © Sooner — locally saved demo (no database)
+        </footer>
+      </main>
+    </div>
+
+    <script type="module" src="./js/ownerProfile.js"></script>
+  </body>
+</html>

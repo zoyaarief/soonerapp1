@@ -1,0 +1,205 @@
+a<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner | Owner Dashboard</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/ownerDashboard.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <button
+            id="sidebarToggle"
+            class="collapse-btn"
+            aria-label="Toggle sidebar"
+          >
+            ⟨⟩
+          </button>
+          <span class="brand-text">Sooner</span>
+        </div>
+
+        <nav class="side-nav" id="sideNav">
+          <a href="#home" class="item active"
+            ><span class="label">Dashboard</span></a
+          >
+          <a href="#statsCard" class="item"><span class="label">Stats</span></a>
+          <a href="ownerProfile.html" class="item"
+            ><span class="label">Profile</span></a
+          >
+
+          <div class="spacer"></div>
+
+          <div class="userchip">
+            <img src="./images/default_profile.png" alt="Owner" />
+            <span id="businessName">Business Name</span>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Main -->
+      <main class="main">
+        <!-- Top -->
+        <header class="top" id="home">
+          <h1>
+            Welcome back, <strong id="greetName">Business Name</strong> 👋
+          </h1>
+          <div class="top-right">
+            <div class="search">
+              <input type="text" placeholder="Search..." />
+            </div>
+            <img
+              class="avatar"
+              src="./images/default_profile.png"
+              alt="owner"
+            />
+          </div>
+        </header>
+
+        <!-- Metric pills -->
+        <section class="pills">
+          <div class="pill">
+            <div class="pill__title">Walk-ins</div>
+            <div class="pill__spark" id="mWalkins">Disabled</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">Open Status</div>
+            <div class="pill__spark" id="mOpen">Closed</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">In Queue</div>
+            <div class="pill__spark" id="mQueueCount">0</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">Avg Wait</div>
+            <div class="pill__spark" id="mAvgWait">30m</div>
+          </div>
+        </section>
+
+        <!-- Grid -->
+        <section class="grid">
+          <!-- Controls (still on page, just not in nav) -->
+          <section id="controlsCard" class="card">
+            <div class="card__head">
+              <h2>Controls</h2>
+            </div>
+            <div class="controls">
+              <button id="walkinBtn" class="btn">Enable Walk-ins</button>
+              <button id="openCloseBtn" class="btn btn--ghost">Open</button>
+              <button id="stopQueueBtn" class="btn btn--danger">
+                Stop Queue
+              </button>
+              <button id="restartQueueBtn" class="btn btn--ghost hidden">
+                Restart Queue
+              </button>
+            </div>
+          </section>
+
+          <!-- Right hero promo -->
+          <section class="card hero">
+            <img src="./images/restaurant.jpg" alt="promo" />
+            <div class="hero__body">
+              <h3>Promote your best hour</h3>
+              <p>
+                Schedule “happy wait” slots and reduce peak-time congestion.
+              </p>
+              <button class="btn btn--ghost">Create Slot</button>
+            </div>
+          </section>
+
+          <!-- Announcements -->
+          <section id="announceCard" class="card span-2">
+            <div class="card__head">
+              <h2>Announcements & Offers</h2>
+            </div>
+            <div class="announce-row">
+              <textarea
+                id="announcementInput"
+                placeholder="Type announcement or offer…"
+              ></textarea>
+              <button id="announceBtn" class="btn">Add</button>
+            </div>
+            <ul id="announceList" class="announce-list"></ul>
+          </section>
+
+          <!-- Queue (still on page, just not in nav) -->
+          <section id="queueCard" class="card span-1">
+            <div class="card__head">
+              <h2>Current Queue</h2>
+              <small class="tiny"
+                >Check to mark served (undo within 5 mins)</small
+              >
+            </div>
+            <div id="queueList" class="queue-list"></div>
+            <div class="btn-row">
+              <button id="undoBtn" class="btn btn--ghost">
+                Open Undo Center
+              </button>
+            </div>
+          </section>
+
+          <!-- Stats (kept in nav) -->
+          <section id="statsCard" class="card span-1">
+            <div class="card__head">
+              <h2>Stats</h2>
+            </div>
+            <div class="mini-cards">
+              <div class="mini">
+                <div>❤️ Likes</div>
+                <strong id="likesCount">42</strong>
+              </div>
+              <div class="mini">
+                <div>✅ Served Today</div>
+                <strong id="servedCount">18</strong>
+              </div>
+              <div class="mini">
+                <div>📊 Avg Wait</div>
+                <strong id="avgWait">30 mins</strong>
+              </div>
+            </div>
+            <canvas id="chart"></canvas>
+          </section>
+        </section>
+
+        <footer class="foot">© Sooner · demo (no database)</footer>
+      </main>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" aria-live="polite">
+      <div class="toast__text" id="toastText">Message</div>
+      <div class="toast__actions">
+        <button id="toastUndo" class="link">Undo</button>
+        <button id="toastClose" class="icon">✕</button>
+      </div>
+    </div>
+
+    <!-- Undo Center Modal -->
+    <div id="modal" class="modal hidden" aria-hidden="true">
+      <div
+        class="modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle"
+      >
+        <div class="modal__head">
+          <h3 id="modalTitle">Undo Center</h3>
+          <button class="icon" id="modalClose">✕</button>
+        </div>
+        <div id="undoList" class="modal__body"></div>
+        <div class="modal__foot">
+          <button class="btn btn--ghost" id="modalClose2">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./js/ownerDashboard.js"></script>
+  </body>
+</html>
