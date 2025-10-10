@@ -4,7 +4,7 @@ let mode = "login"; // "login" | "signup"
 
 // Elements
 const yearEl = document.getElementById("year");
-yearEl.textContent = new Date().getFullYear();
+if (yearEl) yearEl.textContent = new Date().getFullYear();
 
 const tabOwner = document.getElementById("tabOwner");
 const tabCustomer = document.getElementById("tabCustomer");
@@ -118,11 +118,14 @@ function render() {
 }
 render();
 
-// Allow deep link: ?role=customer&mode=signup
+// Allow deep link: ?role=customer&mode=signup&returnTo=/place.html?id=123
 const usp = new URLSearchParams(location.search);
 if (usp.get("role")) role = usp.get("role");
 if (usp.get("mode")) mode = usp.get("mode");
 render();
+
+// Extract optional return target
+const returnTo = usp.get("returnTo");
 
 /* ====== SUBMIT HANDLERS (DEMO ONLY) ====== */
 
@@ -196,7 +199,15 @@ custLogin.addEventListener("submit", (e) => {
       localStorage.setItem("customerName", base || "Customer");
     }
     setStatus(clMsg, "Logged in. Redirecting…", true);
-    setTimeout(() => (location.href = "flashscreen.html"), 600); // change if you have a customer page
+
+    // ✅ redirect logic with returnTo param
+    setTimeout(() => {
+      if (returnTo) {
+        location.href = decodeURIComponent(returnTo);
+      } else {
+        location.href = "userDashboard.html";
+      }
+    }, 600);
   }, 600);
 });
 
@@ -228,6 +239,14 @@ custSignup.addEventListener("submit", (e) => {
       })
     );
     setStatus(csMsg, "Account created. Redirecting…", true);
-    setTimeout(() => (location.href = "flashscreen.html"), 700);
+
+    // ✅ redirect logic with returnTo param
+    setTimeout(() => {
+      if (returnTo) {
+        location.href = decodeURIComponent(returnTo);
+      } else {
+        location.href = "userDashboard.html";
+      }
+    }, 700);
   }, 700);
 });
