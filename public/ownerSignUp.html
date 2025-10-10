@@ -1,44 +1,290 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sooner | Owner Signup</title>
-    <link rel="stylesheet" href="./css/ownerSignup.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner — Login / Sign Up</title>
+
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="./css/ownerSignUp.css" />
   </head>
   <body>
-    <section class="signup-container">
-      <h1>Sooner for Business</h1>
-      <form id="ownerSignupForm">
-        <input
-          type="text"
-          id="managerName"
-          placeholder="Manager Name"
-          required
-        />
-        <input
-          type="text"
-          id="businessName"
-          placeholder="Business Name"
-          required
-        />
-        <input
-          type="text"
-          id="type"
-          placeholder="Type of Business (Restaurant, Salon…)"
-        />
-        <input type="tel" id="phone" placeholder="Phone Number" />
-        <input type="email" id="email" placeholder="Email" required />
-        <input type="password" id="password" placeholder="Password" required />
-        <button type="submit">Create Account</button>
-      </form>
-      <p class="note">Already registered? <a href="#">Login</a></p>
-      <div id="message"></div>
-    </section>
-    <script type="module" src="./js/ownerSignup.js"></script>
+    <main class="auth">
+      <!-- Left: hero -->
+      <section class="hero">
+        <div class="hero__image" role="img" aria-label="City skyline"></div>
+        <div class="hero__overlay"></div>
+        <div class="hero__content">
+          <div class="brand">Sooner</div>
+          <h1>Skip lines, <span class="accent">not plans</span></h1>
+          <p>
+            Owners manage live queues. Customers join from anywhere. One place,
+            less waiting.
+          </p>
+        </div>
+      </section>
+
+      <!-- Right: panel -->
+      <section class="panel">
+        <div class="panel__inner" id="panel">
+          <!-- Role tabs -->
+          <div class="tabs" role="tablist" aria-label="Choose role">
+            <button
+              id="tabOwner"
+              class="tab active"
+              role="tab"
+              aria-selected="true"
+            >
+              Owner
+            </button>
+            <button
+              id="tabCustomer"
+              class="tab"
+              role="tab"
+              aria-selected="false"
+            >
+              Customer
+            </button>
+          </div>
+
+          <!-- Header -->
+          <header class="panel__head">
+            <h2 id="formTitle">Login</h2>
+            <p class="sub" id="formSubtitle">Welcome back! Let’s get you in.</p>
+          </header>
+
+          <!-- OAuth (visual only) -->
+          <button class="btn btn--oauth" type="button">
+            <svg viewBox="0 0 48 48" class="g">
+              <path
+                d="M44.5 20H24v8.5h11.9c-1.1 5.5-6 8.5-11.9 8.5A13.5 13.5 0 1 1 24 11a13.1 13.1 0 0 1 8.6 3.1l6-6A22.5 22.5 0 1 0 24 46.5c11.6 0 21-7.9 21-22.5 0-1.5-.2-2.7-.5-4z"
+                fill="#4285F4"
+              />
+            </svg>
+            Continue with Google
+          </button>
+
+          <div class="divider"><span>or use email</span></div>
+
+          <!-- ===== FORMS ===== -->
+
+          <!-- OWNER LOGIN -->
+          <form id="ownerLogin" class="form" novalidate>
+            <label class="field">
+              <span>Email</span>
+              <input
+                type="email"
+                id="olEmail"
+                placeholder="owner@email.com"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input
+                type="password"
+                id="olPass"
+                placeholder="Min. 8 characters"
+                minlength="8"
+                required
+              />
+            </label>
+            <div class="row">
+              <label class="check"><input type="checkbox" /> Remember me</label>
+              <a class="link" href="#">Forgot password</a>
+            </div>
+            <button class="btn btn--primary" type="submit">Login</button>
+            <p class="swap">
+              New owner?
+              <button type="button" class="link" id="toOwnerSignup">
+                Create an account
+              </button>
+            </p>
+            <p id="olMsg" class="msg" role="status"></p>
+          </form>
+
+          <!-- OWNER SIGNUP -->
+          <form id="ownerSignup" class="form hidden" novalidate>
+            <div class="grid">
+              <label class="field">
+                <span>Manager Name</span>
+                <input
+                  type="text"
+                  id="osManager"
+                  placeholder="Your full name"
+                  required
+                />
+              </label>
+              <label class="field">
+                <span>Business Name</span>
+                <input
+                  type="text"
+                  id="osBusiness"
+                  placeholder="e.g., Sooner Bistro"
+                  required
+                />
+              </label>
+            </div>
+            <div class="grid">
+              <label class="field">
+                <span>Type of Business</span>
+                <input
+                  type="text"
+                  id="osType"
+                  placeholder="Restaurant / Salon / Clinic / Event"
+                  required
+                />
+              </label>
+              <label class="field">
+                <span>Phone</span>
+                <input
+                  type="tel"
+                  id="osPhone"
+                  placeholder="+1 555 555 5555"
+                  required
+                />
+              </label>
+            </div>
+            <label class="field">
+              <span>Email</span>
+              <input
+                type="email"
+                id="osEmail"
+                placeholder="business@email.com"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input
+                type="password"
+                id="osPass"
+                placeholder="Min. 8 characters"
+                minlength="8"
+                required
+              />
+            </label>
+            <button class="btn btn--primary" type="submit">
+              Create Account
+            </button>
+            <p class="swap">
+              Already have an account?
+              <button type="button" class="link" id="toOwnerLogin">
+                Log in
+              </button>
+            </p>
+            <p id="osMsg" class="msg" role="status"></p>
+          </form>
+
+          <!-- CUSTOMER LOGIN -->
+          <form id="custLogin" class="form hidden" novalidate>
+            <label class="field">
+              <span>Email or Username</span>
+              <input
+                type="text"
+                id="clUser"
+                placeholder="you@email.com or @username"
+                required
+              />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input
+                type="password"
+                id="clPass"
+                placeholder="Min. 8 characters"
+                minlength="8"
+                required
+              />
+            </label>
+            <div class="row">
+              <label class="check"><input type="checkbox" /> Remember me</label>
+              <a class="link" href="#">Forgot password</a>
+            </div>
+            <button class="btn btn--primary" type="submit">Login</button>
+            <p class="swap">
+              New here?
+              <button type="button" class="link" id="toCustSignup">
+                Create an account
+              </button>
+            </p>
+            <p id="clMsg" class="msg" role="status"></p>
+          </form>
+
+          <!-- CUSTOMER SIGNUP -->
+          <form id="custSignup" class="form hidden" novalidate>
+            <label class="field">
+              <span>Name</span>
+              <input
+                type="text"
+                id="csName"
+                placeholder="Your full name"
+                required
+              />
+            </label>
+            <div class="grid">
+              <label class="field">
+                <span>Phone</span>
+                <input
+                  type="tel"
+                  id="csPhone"
+                  placeholder="+1 555 555 5555"
+                  required
+                />
+              </label>
+              <label class="field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  id="csEmail"
+                  placeholder="you@email.com"
+                  required
+                />
+              </label>
+            </div>
+            <div class="grid">
+              <label class="field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  id="csUser"
+                  placeholder="@username"
+                  required
+                />
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  id="csPass"
+                  placeholder="Min. 8 characters"
+                  minlength="8"
+                  required
+                />
+              </label>
+            </div>
+            <button class="btn btn--primary" type="submit">
+              Create Account
+            </button>
+            <p class="swap">
+              Already a member?
+              <button type="button" class="link" id="toCustLogin">
+                Log in
+              </button>
+            </p>
+            <p id="csMsg" class="msg" role="status"></p>
+          </form>
+
+          <footer class="foot">
+            © <span id="year"></span> Sooner — demo only (no DB)
+          </footer>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./js/ownerSignUp.js"></script>
   </body>
 </html>
