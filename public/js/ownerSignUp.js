@@ -1,10 +1,15 @@
-// Role & mode state
+// ===== Config: use this origin if served by Express; otherwise fall back to dev port
+const API_BASE = window.location.origin.startsWith("http")
+  ? window.location.origin
+  : "http://localhost:3000";
+
+// ===== STATE =====
 let role = "owner"; // "owner" | "customer"
 let mode = "login"; // "login" | "signup"
 
-// Elements
+// ===== COMMON ELEMENTS =====
 const yearEl = document.getElementById("year");
-yearEl.textContent = new Date().getFullYear();
+if (yearEl) yearEl.textContent = new Date().getFullYear();
 
 const tabOwner = document.getElementById("tabOwner");
 const tabCustomer = document.getElementById("tabCustomer");
@@ -31,7 +36,7 @@ const osEmail = document.getElementById("osEmail");
 const osPass = document.getElementById("osPass");
 const osMsg = document.getElementById("osMsg");
 
-// Customer fields & messages
+// Customer fields & messages (front-end only demo)
 const clUser = document.getElementById("clUser");
 const clPass = document.getElementById("clPass");
 const clMsg = document.getElementById("clMsg");
@@ -44,54 +49,58 @@ const csPass = document.getElementById("csPass");
 const csMsg = document.getElementById("csMsg");
 
 // Switchers inside forms
-document.getElementById("toOwnerSignup").addEventListener("click", () => {
+const toOwnerSignup = document.getElementById("toOwnerSignup");
+const toOwnerLogin = document.getElementById("toOwnerLogin");
+const toCustSignup = document.getElementById("toCustSignup");
+const toCustLogin = document.getElementById("toCustLogin");
+
+toOwnerSignup?.addEventListener("click", () => {
   role = "owner";
   mode = "signup";
   render();
 });
-document.getElementById("toOwnerLogin").addEventListener("click", () => {
+toOwnerLogin?.addEventListener("click", () => {
   role = "owner";
   mode = "login";
   render();
 });
-document.getElementById("toCustSignup").addEventListener("click", () => {
+toCustSignup?.addEventListener("click", () => {
   role = "customer";
   mode = "signup";
   render();
 });
-document.getElementById("toCustLogin").addEventListener("click", () => {
+toCustLogin?.addEventListener("click", () => {
   role = "customer";
   mode = "login";
   render();
 });
 
 // Tabs
-tabOwner.addEventListener("click", () => {
+tabOwner?.addEventListener("click", () => {
   role = "owner";
   render();
 });
-tabCustomer.addEventListener("click", () => {
+tabCustomer?.addEventListener("click", () => {
   role = "customer";
   render();
 });
 
-// Helpers
-const show = (el) => el.classList.remove("hidden");
-const hide = (el) => el.classList.add("hidden");
+// ===== HELPERS =====
+const show = (el) => el && el.classList.remove("hidden");
+const hide = (el) => el && el.classList.add("hidden");
 function setStatus(node, text, ok = false) {
+  if (!node) return;
   node.textContent = text;
   node.style.color = ok ? "#10b981" : "#eab308"; // green / amber
 }
 
 // UI render
 function render() {
-  // tabs
-  tabOwner.classList.toggle("active", role === "owner");
-  tabOwner.setAttribute("aria-selected", role === "owner");
-  tabCustomer.classList.toggle("active", role === "customer");
-  tabCustomer.setAttribute("aria-selected", role === "customer");
+  tabOwner?.classList.toggle("active", role === "owner");
+  tabOwner?.setAttribute("aria-selected", role === "owner");
+  tabCustomer?.classList.toggle("active", role === "customer");
+  tabCustomer?.setAttribute("aria-selected", role === "customer");
 
-  // titles
   if (mode === "login") {
     formTitle.textContent = "Login";
     formSubtitle.textContent =
@@ -106,7 +115,6 @@ function render() {
         : "A few details to start skipping waits.";
   }
 
-  // show correct form
   hide(ownerLogin);
   hide(ownerSignup);
   hide(custLogin);
@@ -116,71 +124,107 @@ function render() {
   if (role === "customer" && mode === "login") show(custLogin);
   if (role === "customer" && mode === "signup") show(custSignup);
 }
-render();
 
-// Allow deep link: ?role=customer&mode=signup
+// Deep link (?role=&mode=)
 const usp = new URLSearchParams(location.search);
 if (usp.get("role")) role = usp.get("role");
 if (usp.get("mode")) mode = usp.get("mode");
 render();
 
-/* ====== SUBMIT HANDLERS (DEMO ONLY) ====== */
-
-// Owner login
-ownerLogin.addEventListener("submit", (e) => {
+/* ====== OWNER: LOGIN (calls backend) ====== */
+ownerLogin?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(olMsg, "Checking…");
-  setTimeout(() => {
-    if (!olEmail.value.trim() || olPass.value.length < 8) {
-      setStatus(olMsg, "Invalid email or password.");
+
+  const email = olEmail.value.trim();
+  const password = olPass.value;
+
+  if (!email || password.length < 8) {
+    setStatus(olMsg, "Invalid email or password.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/owners/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok) {
+      setStatus(olMsg, data?.error || "Login failed.");
       return;
     }
+
     localStorage.setItem("role", "owner");
-    if (!localStorage.getItem("businessName")) {
-      const derived = olEmail.value.split("@")[0] || "Business Name";
-      localStorage.setItem("businessName", derived);
-    }
+    localStorage.setItem(
+      "businessName",
+      data.business || email.split("@")[0] || "Business"
+    );
+
     setStatus(olMsg, "Logged in. Redirecting…", true);
     setTimeout(() => (location.href = "ownerProfile.html"), 600);
-  }, 600);
+  } catch (err) {
+    console.error(err);
+    setStatus(olMsg, "Network error.");
+  }
 });
 
-// Owner signup
-ownerSignup.addEventListener("submit", (e) => {
+/* ====== OWNER: SIGN UP (calls backend) ====== */
+ownerSignup?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(osMsg, "Saving…");
-  const ok =
-    osManager.value.trim() &&
-    osBusiness.value.trim() &&
-    osType.value.trim() &&
-    osPhone.value.trim() &&
-    osEmail.value.trim() &&
-    osPass.value.length >= 8;
 
-  setTimeout(() => {
-    if (!ok) {
-      setStatus(osMsg, "Fill all fields (min 8-char password).");
+  const payload = {
+    manager: osManager.value.trim(),
+    business: osBusiness.value.trim(),
+    type: osType.value.trim(),
+    phone: osPhone.value.trim(),
+    email: osEmail.value.trim(),
+    password: osPass.value,
+  };
+
+  const valid =
+    payload.manager &&
+    payload.business &&
+    payload.type &&
+    payload.phone &&
+    payload.email &&
+    typeof payload.password === "string" &&
+    payload.password.length >= 8;
+
+  if (!valid) {
+    setStatus(osMsg, "Fill all fields (min 8-char password).");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/owners`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data?.ok) {
+      setStatus(osMsg, data?.error || "Failed to create account.");
       return;
     }
+
     localStorage.setItem("role", "owner");
-    localStorage.setItem("businessName", osBusiness.value.trim());
-    localStorage.setItem(
-      "ownerSignup",
-      JSON.stringify({
-        manager: osManager.value.trim(),
-        business: osBusiness.value.trim(),
-        type: osType.value.trim(),
-        phone: osPhone.value.trim(),
-        email: osEmail.value.trim(),
-      })
-    );
+    localStorage.setItem("businessName", payload.business);
+
     setStatus(osMsg, "Account created. Redirecting…", true);
     setTimeout(() => (location.href = "ownerProfile.html"), 700);
-  }, 700);
+  } catch (err) {
+    console.error(err);
+    setStatus(osMsg, "Network error.");
+  }
 });
 
-// Customer login
-custLogin.addEventListener("submit", (e) => {
+/* ====== CUSTOMER: (front-end only demo) ====== */
+custLogin?.addEventListener("submit", (e) => {
   e.preventDefault();
   setStatus(clMsg, "Checking…");
   setTimeout(() => {
@@ -196,12 +240,11 @@ custLogin.addEventListener("submit", (e) => {
       localStorage.setItem("customerName", base || "Customer");
     }
     setStatus(clMsg, "Logged in. Redirecting…", true);
-    setTimeout(() => (location.href = "flashscreen.html"), 600); // change if you have a customer page
-  }, 600);
+    setTimeout(() => (location.href = "flashscreen.html"), 600);
+  }, 500);
 });
 
-// Customer signup
-custSignup.addEventListener("submit", (e) => {
+custSignup?.addEventListener("submit", (e) => {
   e.preventDefault();
   setStatus(csMsg, "Saving…");
   const ok =
@@ -229,5 +272,5 @@ custSignup.addEventListener("submit", (e) => {
     );
     setStatus(csMsg, "Account created. Redirecting…", true);
     setTimeout(() => (location.href = "flashscreen.html"), 700);
-  }, 700);
+  }, 500);
 });
