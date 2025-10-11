@@ -198,6 +198,8 @@ body {
   margin: 18px 0;
 }
 .pill {
+  display: flex;
+  justify-content: space-between;
   background: #fff;
   border: 1px solid var(--stroke);
   border-radius: 16px;
@@ -545,4 +547,21 @@ body {
   .userchip {
     margin-top: 6px;
   }
+}
+/* Queue */
+.queue-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px; /* <-- make scrollable */
+  overflow: auto; /* <-- vertical scroll */
+  padding-right: 6px; /* nicer with scrollbars */
+}
+
+/* Optional: softer scrollbar (WebKit) */
+.queue-list::-webkit-scrollbar {
+  width: 8px;
+}
+.queue-list::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 8px;
 }

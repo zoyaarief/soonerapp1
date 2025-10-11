@@ -45,7 +45,7 @@ body {
 .hero__image {
   position: absolute;
   inset: 0;
-  background: url("../images/restaurant.jpg") center/cover no-repeat;
+  background: url("../images/restaurant2.jpg") center/cover no-repeat;
   transform: scale(1.04);
 }
 .hero__overlay {

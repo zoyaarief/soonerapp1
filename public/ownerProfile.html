@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Sooner | Owner Profile</title>
 
-    <!-- Fonts: body (Plus Jakarta), display (Poppins) -->
+    <!-- Fonts -->
     <link
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
       rel="stylesheet"
@@ -14,34 +14,51 @@
   </head>
   <body>
     <div class="layout">
-      <!-- SIDENAV -->
-      <aside class="sidenav">
-        <div class="brand">Sooner</div>
-        <nav>
-          <a href="#overview" class="navlink active">Overview</a>
-          <a href="#media" class="navlink">Media</a>
-          <a href="#details" class="navlink">Details</a>
-          <a href="#hours" class="navlink">Hours</a>
-          <a href="#settings" class="navlink">Settings</a>
-        </nav>
-        <div class="userchip">
-          <img src="./images/default_profile.png" alt="" />
-          <span id="businessName">Business Name</span>
+      <!-- SIDEBAR (changed to match dashboard; rest of page intact) -->
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <button
+            id="sidebarToggle"
+            class="collapse-btn"
+            aria-label="Toggle sidebar"
+          >
+            ⟨⟩
+          </button>
+          <span class="brand-text">Sooner</span>
         </div>
+
+        <nav class="side-nav" id="sideNav">
+          <a href="ownerDashboard.html" class="item"
+            ><span class="label">Dashboard</span></a
+          >
+          <a href="#overview" class="item active"
+            ><span class="label">Overview</span></a
+          >
+          <a href="#media" class="item"><span class="label">Media</span></a>
+          <a href="#details" class="item"><span class="label">Details</span></a>
+          <a href="#hours" class="item"><span class="label">Hours</span></a>
+          <a href="#settings" class="item"
+            ><span class="label">Settings</span></a
+          >
+
+          <div class="spacer"></div>
+
+          <div class="userchip">
+            <img src="./images/default_profile.png" alt="Owner" />
+            <span id="businessName">Business Name</span>
+          </div>
+        </nav>
       </aside>
 
-      <!-- MAIN -->
+      <!-- MAIN (unchanged) -->
       <main class="main">
-        <!-- TOPBAR -->
+        <!-- TOPBAR (unchanged) -->
         <header class="topbar">
           <div class="crumbs">Account / <strong>Profile</strong></div>
-          <button id="goDashboardBtn" class="btn btn--ghost">
-            Go to Dashboard →
-          </button>
           <button id="logoutBtn" class="btn btn--ghost">Logout</button>
         </header>
 
-        <!-- OVERVIEW -->
+        <!-- OVERVIEW (unchanged) -->
         <section id="overview" class="card">
           <div class="card__header">
             <h2>Business Overview</h2>
@@ -146,7 +163,7 @@
           </div>
         </section>
 
-        <!-- MEDIA -->
+        <!-- MEDIA (unchanged) -->
         <section id="media" class="card">
           <div class="card__header">
             <h2>Gallery & Menu</h2>
@@ -170,7 +187,7 @@
           <div class="masonry" id="galleryGrid"></div>
         </section>
 
-        <!-- DETAILS -->
+        <!-- DETAILS (unchanged) -->
         <section id="details" class="card">
           <div class="card__header"><h2>Extra Details</h2></div>
           <div class="form__row">
@@ -182,7 +199,7 @@
           </div>
         </section>
 
-        <!-- HOURS -->
+        <!-- HOURS (unchanged) -->
         <section id="hours" class="card">
           <div class="card__header"><h2>Hours</h2></div>
           <div class="form__grid">
@@ -197,7 +214,7 @@
           </div>
         </section>
 
-        <!-- SETTINGS -->
+        <!-- SETTINGS (unchanged) -->
         <section id="settings" class="card">
           <div class="card__header"><h2>Settings</h2></div>
           <div class="buttonrow">
@@ -210,12 +227,19 @@
           </div>
         </section>
 
-        <footer class="footnote">
-          © Sooner — locally saved demo (no database)
-        </footer>
+        <footer class="footnote">© Sooner — DB connected</footer>
       </main>
     </div>
 
     <script type="module" src="./js/ownerProfile.js"></script>
+
+    <!-- Sidebar collapse identical to dashboard -->
+    <script>
+      const sidebar = document.getElementById("sidebar");
+      const toggleBtn = document.getElementById("sidebarToggle");
+      toggleBtn?.addEventListener("click", () => {
+        sidebar?.classList.toggle("collapsed");
+      });
+    </script>
   </body>
 </html>
