@@ -1,106 +1,118 @@
-const links = document.querySelectorAll(".navlink");
-const sections = [...document.querySelectorAll("section.card")];
-function setActive() {
-  const y = window.scrollY + 120;
-  let current = sections[0].id;
-  sections.forEach((s)=>{ if (y >= s.offsetTop) current = s.id; });
-  links.forEach((a)=>a.classList.toggle("active", a.getAttribute("href")==="#"+current));
+
+// userProfile.js — Avatar + profile info + favorites + history + logout (backend wired)
+
+// Elements
+const avatarInput = document.getElementById("avatarUpload");
+const avatarImg = document.getElementById("avatarImg");
+const nameInput = document.getElementById("userName");
+const emailInput = document.getElementById("userEmail");
+const phoneInput = document.getElementById("userPhone");
+const favsList = document.getElementById("favoritesList");
+const historyList = document.getElementById("historyList");
+const logoutBtn = document.getElementById("logoutBtn");
+const favCount = document.getElementById("favCount");
+const queueCount = document.getElementById("queueCount");
+const saveBtn = document.getElementById("saveProfile");
+
+// Toast (optional)
+const toastEl = document.getElementById("toast");
+const toastText = document.getElementById("toastText");
+document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
+function toast(msg){
+  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+  toastText.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
 }
-window.addEventListener("scroll", setActive); setActive();
 
-const chipName = document.getElementById("chipName");
-chipName.textContent = localStorage.getItem("customerName") || "Customer";
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 
-// Avatar upload (local only)
-const avatarInput = document.getElementById("avatarInput");
-avatarInput?.addEventListener("change", async (e) => {
-  const f = e.target.files?.[0]; if (!f) return;
-  const fr = new FileReader();
-  fr.onload = () => {
-    document.getElementById("avatar").src = fr.result;
-    localStorage.setItem("customerAvatar", fr.result);
+// Avatar upload + preview (local persistence for now)
+avatarInput?.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    avatarImg.src = reader.result;
+    localStorage.setItem("customerAvatar", reader.result);
+    toast("Avatar updated");
   };
-  fr.readAsDataURL(f);
+  reader.readAsDataURL(file);
 });
-const savedAvatar = localStorage.getItem("customerAvatar");
-if (savedAvatar) document.getElementById("avatar").src = savedAvatar;
 
-// Stats + lists
-function getFavs(){ try{return JSON.parse(localStorage.getItem("favorites")||"[]");}catch{return[];}}
-function getHist(){ try{return JSON.parse(localStorage.getItem("history")||"[]");}catch{return[];}}
-function getActive(){ try{return JSON.parse(localStorage.getItem("activeQueue")||"null");}catch{return null;}}
+const storedAvatar = localStorage.getItem("customerAvatar");
+if (storedAvatar) avatarImg.src = storedAvatar;
 
-function render() {
-  const favs = getFavs(); const hist = getHist(); const active = getActive();
-  document.getElementById("statFavs").textContent = String(favs.length);
-  document.getElementById("statHistory").textContent = String(hist.length);
-  document.getElementById("statActive").textContent = active ? `${active.placeName} • #${active.position}` : "None";
-
-  const favList = document.getElementById("favList");
-  favList.innerHTML = "";
-  if (!favs.length) favList.innerHTML = `<li class="muted">No favorites yet.</li>`;
-  favs.forEach(f => {
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${f.name} • ⭐ ${f.rating ?? "—"}</span>
-                    <span>
-                      <a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(f.id)}">Open</a>
-                      <button data-rm="${f.id}" class="btn small">Remove</button>
-                    </span>`;
-    favList.appendChild(li);
-  });
-  favList.addEventListener("click", (e)=>{
-    const rm = e.target.closest("[data-rm]"); if(!rm) return;
-    const id = rm.getAttribute("data-rm");
-    const arr = getFavs(); const i = arr.findIndex(x=>x.id===id);
-    if (i>-1) arr.splice(i,1);
-    localStorage.setItem("favorites", JSON.stringify(arr));
-    render();
-  }, { once: true });
-
-  const hList = document.getElementById("historyList");
-  hList.innerHTML = "";
-  if (!hist.length) hList.innerHTML = `<li class="muted">No visits yet.</li>`;
-  hist.forEach(h => {
-    const dt = new Date(h.at).toLocaleString();
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${h.name} • ${dt}</span>
-                    <span>
-                      <a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(h.id)}">Revisit</a>
-                      <button class="btn small" data-fav="${h.id}">Fav</button>
-                    </span>`;
-    hList.appendChild(li);
-  });
-  hList.addEventListener("click", (e) => {
-    const fav = e.target.closest("[data-fav]"); if (!fav) return;
-    const id = fav.getAttribute("data-fav");
-    const favs = JSON.parse(localStorage.getItem("favorites")||"[]");
-    if (!favs.some(f=>f.id===id)) {
-      const place = (JSON.parse(localStorage.getItem("places")||"[]")).find(p=>p.id===id);
-      favs.push({id, name: place?.name || "Place", rating: place?.rating || 0});
-      localStorage.setItem("favorites", JSON.stringify(favs));
-      render();
+// Favorites
+async function renderFavorites() {
+  try {
+    const list = await fetchJSON("/api/likes");
+    favsList.innerHTML = "";
+    if (!list.length) {
+      favsList.innerHTML = "<p class='muted'>No favorites yet.</p>";
+    } else {
+      list.forEach((f) => {
+        const li = document.createElement("li");
+        li.textContent = f.venueId;
+        favsList.appendChild(li);
+      });
     }
-  }, { once: true });
+    favCount.textContent = list.length;
+  } catch(e) {
+    favsList.innerHTML = "<p class='muted'>Failed to load favorites.</p>";
+  }
+}
 
-render();
+// History
+async function renderHistory() {
+  try {
+    const list = await fetchJSON("/api/history");
+    historyList.innerHTML = "";
+    if (!list.length) {
+      historyList.innerHTML = "<p class='muted'>No queue history yet.</p>";
+    } else {
+      list.forEach((h) => {
+        const li = document.createElement("li");
+        const dt = new Date(h.at).toLocaleString();
+        li.textContent = `${h.type.replace("queue.", "")} • ${dt}`;
+        historyList.appendChild(li);
+      });
+    }
+    queueCount.textContent = list.length;
+  } catch(e) {
+    historyList.innerHTML = "<p class='muted'>Failed to load history.</p>";
+  }
+}
 
-// Account form
-const acctForm = document.getElementById("acctForm");
-const status = document.getElementById("status");
-(function hydrate(){
-  const profile = JSON.parse(localStorage.getItem("customerProfile")||"{}");
-  document.getElementById("name").value = profile.name || (localStorage.getItem("customerName")||"");
-  document.getElementById("phone").value = profile.phone || "";
-  document.getElementById("email").value = profile.email || "";
-})();
-acctForm.addEventListener("submit", (e)=>{
-  e.preventDefault();
-  const profile = {
-    name: document.getElementById("name").value.trim(),
-    phone: document.getElementById("phone").value.trim(),
-    email: document.getElementById("email").value.trim(),
-  };
-  localStorage.setItem("customerProfile", JSON.stringify(profile));
-  if (profile.name) { localStorage.setItem("customerName", profile.name); chipName.textContent = profile.name; }
-  status.style.color = "green"; status.textContent = "Saved"; setTimeout(()=>status.textContent="", 1500);
+// Profile info (local for now)
+function loadProfileInfo() {
+  if (nameInput) nameInput.value = localStorage.getItem("customerName") || "";
+  if (emailInput) emailInput.value = localStorage.getItem("customerEmail") || "";
+  if (phoneInput) phoneInput.value = localStorage.getItem("customerPhone") || "";
+}
+function saveProfileInfo() {
+  if (nameInput) localStorage.setItem("customerName", nameInput.value);
+  if (emailInput) localStorage.setItem("customerEmail", emailInput.value);
+  if (phoneInput) localStorage.setItem("customerPhone", phoneInput.value);
+  toast("✅ Profile updated");
+}
+
+// Logout
+logoutBtn?.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST", credentials: "include" });
+  localStorage.clear();
+  location.href = "ownerSignUp.html?role=customer&mode=login";
 });
+
+saveBtn?.addEventListener("click", saveProfileInfo);
+
+// Init
+(async function init(){
+  loadProfileInfo();
+  await Promise.all([renderFavorites(), renderHistory()]);
+})();

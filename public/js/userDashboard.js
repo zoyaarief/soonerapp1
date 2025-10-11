@@ -1,94 +1,168 @@
-const sidebar = document.getElementById("sidebar");
-const toggleBtn = document.getElementById("sidebarToggle");
-toggleBtn?.addEventListener("click", () => sidebar?.classList.toggle("collapsed"));
 
-// Greeting
-const name = localStorage.getItem("customerName") || "Customer";
-document.getElementById("customerName").textContent = name;
-document.getElementById("greetName").textContent = name;
+// userDashboard.js — LIVE data + hearts + announcements + graceful fallbacks
 
-// Pills data
-function getFavs() {
-  try { return JSON.parse(localStorage.getItem("favorites") || "[]"); } catch { return []; }
+// ============== Helpers ==============
+function qs(sel){ return document.querySelector(sel); }
+function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+// Toast (optional UI)
+const toastEl = document.getElementById("toast");
+const toastText = document.getElementById("toastText");
+document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
+function toast(msg){
+  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+  toastText.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
 }
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem("history") || "[]"); } catch { return []; }
-}
-function getActive() {
-  try { return JSON.parse(localStorage.getItem("activeQueue") || "null"); } catch { return null; }
-}
-function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
-function toast(t){ const el = document.getElementById("toast"); const tx = document.getElementById("toastText"); if(!el||!tx) return; tx.textContent = t; el.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove("show"), 2600); }
-document.getElementById("toastClose")?.addEventListener("click", () => document.getElementById("toast")?.classList.remove("show"));
 
-function refresh() {
-  const favs = getFavs();
-  const hist = getHistory();
-  const active = getActive();
-  setText("pillFavs", String(favs.length));
-  setText("pillHistory", String(hist.length));
-  if (active) {
-    setText("pillQueue", `${active.placeName} • #${active.position}`);
-    document.getElementById("gotoActive")?.classList.remove("hidden");
-    document.getElementById("continueBlock").innerHTML = `<strong>${active.placeName}</strong><br/>You are #${active.position} in queue. <a href="place.html?id=${encodeURIComponent(active.placeId)}">Open</a>`;
-  } else {
-    setText("pillQueue", "None");
-    document.getElementById("gotoActive")?.classList.add("hidden");
-    document.getElementById("continueBlock").textContent = "No active queue.";
-  }
+async function fetchJSON(url, opts={}){
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 
-  // Favorites list
-  const list = document.getElementById("favList");
-  const empty = document.getElementById("favEmpty");
-  if (list) {
-    list.innerHTML = "";
-    if (!favs.length) { empty.style.display = "block"; }
-    else {
-      empty.style.display = "none";
-      favs.slice(0,6).forEach(f => {
-        const li = document.createElement("li");
-        li.innerHTML = `<span>${f.name} • ⭐ ${f.rating ?? "—"}</span> <a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(f.id)}">Open</a>`;
-        list.appendChild(li);
-      });
+const greetNameEl = document.getElementById("greetName");
+if (greetNameEl) greetNameEl.textContent = localStorage.getItem("customerName") || "Customer";
+
+// ====== Category buttons → Browse page ======
+document.querySelectorAll(".categories button").forEach((btn) => {
+  const raw = btn.getAttribute("data-type"); // e.g. "restaurants", "salons", etc.
+  btn.addEventListener("click", () => {
+    location.href = `browse.html?type=${encodeURIComponent(raw)}`;
+  });
+});
+
+// Normalize plural/singular category names
+function normalizeType(t){
+  const map = { restaurants:"restaurant", restaurant:"restaurant",
+                salons:"salon", salon:"salon",
+                clinics:"clinic", clinic:"clinic",
+                events:"event", event:"event",
+                services:"other", service:"other", other:"other" };
+  return map[(t||"").toLowerCase()] || t;
+}
+
+// Category buttons → browse
+qsa(".categories button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const raw = btn.getAttribute("data-type");
+    const type = normalizeType(raw);
+    if (type) location.href = `browse.html?type=${encodeURIComponent(type)}`;
+  });
+});
+
+// Explore nearby
+document.getElementById("exploreBtn")?.addEventListener("click", () => {
+  location.href = "browse.html?nearby=1";
+});
+
+// Announcements banner
+fetchJSON("/api/announcements/active")
+  .then(items => {
+    if (!items?.length) return;
+    const b = document.querySelector(".banner .text");
+    if (!b) return;
+    const first = items[0];
+    b.innerHTML = `<h2>${first.type === "offer" ? "🎁 Offer" : "📢 Announcement"}</h2><p>${first.message}</p>`;
+  })
+  .catch(()=>{});
+
+// Favorites (likes) — preload to render hearts
+let likedSet = new Set();
+async function loadLikes(){
+  try {
+    const likes = await fetchJSON("/api/likes");
+    likedSet = new Set(likes.map(x => String(x.venueId || x.venue_id || x._id)));
+  } catch(e){ likedSet = new Set(); }
+}
+function isLiked(id){ return likedSet.has(String(id)); }
+
+function heartButtonHTML(id){
+  const on = isLiked(id) ? "on" : "off";
+  return `<button class="heart ${on}" aria-label="Favorite" data-like="${id}">♥</button>`;
+}
+
+async function toggleLike(venueId, btn){
+  try{
+    const idStr = String(venueId);
+    if (isLiked(idStr)){
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"DELETE", credentials:"include" });
+      likedSet.delete(idStr);
+      btn?.classList.remove("on");
+      toast("Removed from favorites");
+    } else {
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"POST", credentials:"include" });
+      likedSet.add(idStr);
+      btn?.classList.add("on");
+      toast("Added to favorites");
     }
-  }
-
-  // Recently viewed
-  const rec = JSON.parse(localStorage.getItem("recentPlaces") || "[]");
-  const row = document.getElementById("recentRow");
-  if (row) {
-    row.innerHTML = "";
-    rec.slice(0,8).forEach(p => {
-      const tile = document.createElement("div");
-      tile.className = "tile";
-      tile.innerHTML = `<img src="${p.image || "./images/restaurant2.jpg"}" alt="${p.name}" />
-                        <div class="meta"><span>${p.name}</span><a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(p.id)}">Open</a></div>`;
-      row.appendChild(tile);
-    });
+  }catch(e){
+    if (e?.message?.includes("Unauthorized") || e?.status === 401){
+      const ret = encodeURIComponent(location.pathname + location.search);
+      location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+      return;
+    }
+    toast("Action failed");
   }
 }
-refresh();
 
-document.getElementById("useLocation")?.addEventListener("click", () => {
-  if (!navigator.geolocation) { toast("Geolocation not supported"); return; }
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      localStorage.setItem("userLocation", JSON.stringify({lat: pos.coords.latitude, lng: pos.coords.longitude, ts: Date.now()}));
-      toast("Location saved"); 
-      window.location.href = "browse.html?nearby=1";
-    },
-    () => toast("Location denied")
-  );
-});
+// Card factory
+function makeCard(p){
+  const div = document.createElement("div");
+  div.className = "card";
+  div.innerHTML = `
+    <div class="card-media">
+      <img src="${p.heroImage || p.image || './images/restaurant.jpg'}" alt="${p.name}">
+      <div class="card-actions">
+        ${heartButtonHTML(p._id)}
+      </div>
+    </div>
+    <div class="body">
+      <h3>${p.name}</h3>
+      <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
+      <button data-id="${p._id}">Join Queue</button>
+    </div>`;
+  div.querySelector("button[data-id]")?.addEventListener("click", () => {
+    location.href = `place.html?id=${encodeURIComponent(p._id)}`;
+  });
+  div.querySelector("button.heart")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    toggleLike(p._id, ev.currentTarget);
+  });
+  return div;
+}
 
-document.getElementById("globalSearch")?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    const q = e.currentTarget.value.trim();
-    if (q) window.location.href = `browse.html?q=${encodeURIComponent(q)}`;
+// Render rows
+async function renderSection(rowId, typeRaw){
+  const type = normalizeType(typeRaw);
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  row.innerHTML = "<div class='muted'>Loading…</div>";
+  try{
+    const list = await fetchJSON(`/api/venues?type=${encodeURIComponent(type)}&limit=12`);
+    row.innerHTML = "";
+    list.forEach(p => row.appendChild(makeCard(p)));
+  }catch(e){
+    row.innerHTML = "<div class='muted'>Failed to load.</div>";
   }
-});
+}
 
-document.getElementById("gotoActive")?.addEventListener("click", () => {
-  const a = getActive();
-  if (a) location.href = `place.html?id=${encodeURIComponent(a.placeId)}`;
-});
+(async function init(){
+  await loadLikes();
+  renderSection("restaurantsRow", "restaurant");
+  renderSection("salonsRow", "salon");
+  renderSection("clinicsRow", "clinic");
+  renderSection("eventsRow", "event");
+})();
+
+// Geolocation label (optional)
+if (navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{ localStorage.setItem("userLocation", JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })); qs("#userCity") && (qs("#userCity").textContent = "your location"); },
+    ()=>{ qs("#userCity") && (qs("#userCity").textContent = "Boston"); }
+  );
+} else {
+  qs("#userCity") && (qs("#userCity").textContent = "Boston");
+}

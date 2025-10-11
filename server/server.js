@@ -53,6 +53,9 @@ app.use(
   })
 );
 
+import api from "./api.routes.js";
+app.use("/api", api);
+
 // ---- Health
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
@@ -189,3 +192,5 @@ connectToDb()
     console.error("DB connection failed:", e);
     process.exit(1);
   });
+
+  import "./queueWorker.js";

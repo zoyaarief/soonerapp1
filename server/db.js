@@ -22,6 +22,12 @@ export async function connectToDb() {
 
   // Useful index: unique email for owners
   await db.collection("owners").createIndex({ email: 1 }, { unique: true });
+  await db.collection("venues").createIndex({ category: 1, rating: -1 });
+  await db.collection("venues").createIndex({ "location": "2dsphere" }); // if you store coords
+  await db.collection("likes").createIndex({ userId: 1, venueId: 1 }, { unique: true });
+  await db.collection("queue").createIndex({ venueId: 1, status: 1, order: 1 });
+  await db.collection("queue").createIndex({ userId: 1, status: 1 });
+  await db.collection("queue").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
   return db;
 }
