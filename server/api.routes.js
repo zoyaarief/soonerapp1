@@ -1,8 +1,73 @@
 import express from "express";
 import { getDb } from "./db.js";
+import { ObjectId } from "mongodb";
+import bcrypt from "bcrypt";
 
 const api = express.Router();
 api.use(express.json());
+
+// ---------- Customer Auth ----------
+api.post("/customers/signup", async (req, res) => {
+  try {
+    const db = getDb();
+    const { name, email, password } = req.body || {};
+    if (!name?.trim() || !email?.trim() || !password || password.length < 6) {
+      return res.status(400).json({ error: "Invalid input" });
+    }
+
+    const existing = await db.collection("customers").findOne({ email: email.trim().toLowerCase() });
+    if (existing) return res.status(409).json({ error: "Email already exists" });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const doc = {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      passwordHash,
+      createdAt: new Date(),
+    };
+    const result = await db.collection("customers").insertOne(doc);
+
+    // create session
+    req.session.user = { id: String(result.insertedId), role: "customer", name: doc.name, email: doc.email };
+    res.json({ ok: true, user: req.session.user });
+  } catch (err) {
+    console.error("Customer signup error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+api.post("/customers/login", async (req, res) => {
+  try {
+    const db = getDb();
+    const { email, password } = req.body || {};
+    if (!email?.trim() || !password) return res.status(400).json({ error: "Missing email/password" });
+
+    const user = await db.collection("customers").findOne({ email: email.trim().toLowerCase() });
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+
+    const ok = await bcrypt.compare(password, user.passwordHash || "");
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
+    req.session.user = { id: String(user._id), role: "customer", name: user.name, email: user.email };
+    res.json({ ok: true, user: req.session.user });
+  } catch (err) {
+    console.error("Customer login error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+api.post("/customers/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie("sooner.sid");
+    res.json({ ok: true });
+  });
+});
+
+// for checking in who's logged in
+api.get("/customers/session", (req, res) => {
+  if (req.session?.user) return res.json({ ok: true, user: req.session.user });
+  res.status(401).json({ ok: false });
+});
 
 // ---------- Auth helpers ----------
 function requireCustomer(req, res, next) {
@@ -80,11 +145,30 @@ api.get("/venues", async (req, res) => {
 api.get("/venues/:id", async (req, res) => {
   const db = getDb();
   const venueId = req.params.id;
-  const venue = await db.collection("venues").findOne({ _id: venueId });
+  //const venue = await db.collection("venues").findOne({ _id: venueId });
+  const query = ObjectId.isValid(venueId)
+  ? { _id: new ObjectId(venueId) }
+  : { _id: venueId };
+
+const venue = await db.collection("venues").findOne(query);
   if (!venue) return res.status(404).json({ error: "Not found" });
 
   const waiting = await db.collection("queue").countDocuments({ venueId, status: "waiting" });
   res.json({ ...venue, waiting });
+});
+
+api.get("/owner_settings/:venueId", async (req, res) => {
+  try {
+    const db = getDb();
+    const s = await db
+      .collection("owner_settings")
+      .findOne({ venueId: req.params.venueId });
+    if (!s) return res.status(404).json({ error: "Settings not found" });
+    res.json(s);
+  } catch (err) {
+    console.error("Error fetching owner settings:", err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // ---------- Likes / Favorites ----------
@@ -144,6 +228,17 @@ api.post("/queue/:venueId/join", requireCustomer, async (req, res) => {
   const db = getDb();
   const { people = 2 } = req.body;
   const venueId = req.params.venueId;
+
+  // fetch owner settings for this venue
+  const settings = await db.collection("owner_settings").findOne({ venueId });
+  if (
+    !settings ||
+    !settings.walkinsEnabled ||
+    settings.openStatus !== "open" ||
+    !settings.queueActive
+  ) {
+    return res.status(403).json({ error: "Queue not active" });
+  }
 
   // deny if already in queue
   const existing = await db.collection("queue").findOne({

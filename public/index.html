@@ -51,7 +51,7 @@
           From “How long?” to “You’re up next” — live queues for local services.
         </p>
 
-        <button class="btn-primary">
+        <button class="btn-primary" id="discoverBtn">
           Discover More
           <span class="arrow">↗</span>
         </button>
@@ -104,4 +104,10 @@
 
     <script type="module" src="./js/flashscreen.js"></script>
   </body>
+
+  <script>
+  document.getElementById("discoverBtn")?.addEventListener("click", () => {
+    window.location.href = "/ownerSignUp.html?role=customer&mode=signup";
+  });
+</script>
 </html>

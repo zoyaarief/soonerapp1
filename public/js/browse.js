@@ -120,7 +120,7 @@ async function load() {
   let type = usp.get("type") || "";
   if (type) type = map[type.toLowerCase()] || type;
 
-  const q = (document.getElementById("search")?.value || usp.get("q") || "").trim();
+  const q = (document.getElementById("q")?.value || usp.get("q") || "").trim();
   const loc = (document.getElementById("loc")?.value || "").trim();
   const price = document.getElementById("price")?.value || "";
   const rating = document.getElementById("rating")?.value || "";

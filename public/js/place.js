@@ -30,14 +30,34 @@ let pollingT = null;
 // ============== Venue load ==============
 async function loadVenue(){
   const v = await fetchJSON(`/api/venues/${encodeURIComponent(currentId)}`);
-  qs("#venueName") && (qs("#venueName").textContent = v.name);
-  qs("#venueRating") && (qs("#venueRating").textContent = v.rating ?? "—");
-  qs("#waitingCount") && (qs("#waitingCount").textContent = v.waiting ?? 0);
+  qs("#name") && (qs("#name").textContent = v.name);
+  qs("#rating") && (qs("#rating").textContent = v.rating ?? "—");
+  qs("#count") && (qs("#count").textContent = v.waiting ?? 0);
   qs("#cover") && (qs("#cover").src = v.heroImage || v.image || "./images/restaurant.jpg");
   // approx wait
   const per = (v.stats?.avgWaitMins) ?? v.waitPerGroup ?? 8;
   const approx = (v.waiting ?? 0) * per;
-  qs("#approxWait") && (qs("#approxWait").textContent = approx ? `${approx} mins` : "—");
+  qs("#wait") && (qs("#wait").textContent = approx ? `${approx} mins` : "—");
+
+    // unhide main container once venue data is ready
+  document.getElementById("main")?.classList.remove("hidden");
+
+    // check owner settings
+  try {
+    const s = await fetchJSON(`/api/owner_settings/${encodeURIComponent(currentId)}`);
+    const enterBtn = qs("#enterBtn");
+    if (
+      !s.walkingenable ||
+      s.openstatus !== "open" ||
+      !s.queueactive
+    ) {
+      enterBtn.disabled = true;
+      enterBtn.textContent = "Queue Unavailable";
+      enterBtn.classList.add("disabled");
+    }
+  } catch {
+    // ignore missing settings
+  }
 }
 
 // ============== Queue actions ==============
@@ -124,13 +144,13 @@ function renderActive(active, venueWaiting){
       <b id="timerLeft">${deadline ? formatCountdown(msLeft) : "—"}</b>
     </div>
     <div class="actions">
-      <button id="btnCancel">Cancel</button>
-      <button id="btnArrived">I'm here</button>
+      <button id="cancelBtn">Cancel</button>
+      <button id="imhere">I'm here</button>
     </div>
   `;
 
-  qs("#btnCancel")?.addEventListener("click", cancelQueue);
-  qs("#btnArrived")?.addEventListener("click", arrived);
+  qs("#cancelBtn")?.addEventListener("click", cancelQueue);
+  qs("#imhere")?.addEventListener("click", arrived);
 
   // live countdown tick
   if (deadline){
@@ -205,7 +225,7 @@ async function handlePostReview(){
 }
 
 // ============== Wire UI ==============
-qs("#joinBtn")?.addEventListener("click", () => {
+qs("#enterBtn")?.addEventListener("click", () => {
   let people = 2;
   const inp = prompt("How many people in your party?", "2");
   if (inp !== null){

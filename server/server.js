@@ -8,6 +8,7 @@ import MongoStore from "connect-mongo";
 import { connectToDb, getDb } from "./db.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import "./queueWorker.js";
 
 dotenv.config();
 
@@ -18,12 +19,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "dev-secret";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ---- Static (serves /public)
-app.use(express.static(path.join(__dirname, "..", "public")));
-
 // ---- CORS
 // If you open pages from http://localhost:5173 (e.g., Vite), keep this:
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+//app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(cors());
 // If you open pages from http://localhost:3000 instead, you can use:
 // app.use(cors());
 
@@ -55,6 +54,9 @@ app.use(
 
 import api from "./api.routes.js";
 app.use("/api", api);
+
+// ---- Static (serves /public)
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 // ---- Health
 app.get("/api/health", (_req, res) => {
@@ -192,5 +194,4 @@ connectToDb()
     console.error("DB connection failed:", e);
     process.exit(1);
   });
-
-  import "./queueWorker.js";
+  

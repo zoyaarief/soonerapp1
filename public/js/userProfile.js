@@ -2,16 +2,16 @@
 // userProfile.js — Avatar + profile info + favorites + history + logout (backend wired)
 
 // Elements
-const avatarInput = document.getElementById("avatarUpload");
-const avatarImg = document.getElementById("avatarImg");
-const nameInput = document.getElementById("userName");
-const emailInput = document.getElementById("userEmail");
-const phoneInput = document.getElementById("userPhone");
-const favsList = document.getElementById("favoritesList");
+const avatarInput = document.getElementById("avatarInput");
+const avatarImg = document.getElementById("avatar");
+const nameInput = document.getElementById("name");
+const emailInput = document.getElementById("email");
+const phoneInput = document.getElementById("phone");
+const favsList = document.getElementById("favList");
 const historyList = document.getElementById("historyList");
 const logoutBtn = document.getElementById("logoutBtn");
-const favCount = document.getElementById("favCount");
-const queueCount = document.getElementById("queueCount");
+const favCount = document.getElementById("statFavs");
+const queueCount = document.getElementById("statHistory");
 const saveBtn = document.getElementById("saveProfile");
 
 // Toast (optional)
