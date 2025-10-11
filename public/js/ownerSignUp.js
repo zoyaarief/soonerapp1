@@ -15,7 +15,7 @@ let mode = "login"; // "login" | "signup"
 
 // ===== ELEMENTS =====
 const yearEl = document.getElementById("year");
-yearEl && (yearEl.textContent = new Date().getFullYear());
+if (yearEl) yearEl.textContent = new Date().getFullYear();
 
 const tabOwner = document.getElementById("tabOwner");
 const tabCustomer = document.getElementById("tabCustomer");
@@ -131,13 +131,14 @@ function render() {
   if (role === "customer" && mode === "signup") show(custSignup);
 }
 
-// Deep link
+// Allow deep link: ?role=customer&mode=signup&returnTo=/place.html?id=123
 const usp = new URLSearchParams(location.search);
 if (usp.get("role")) role = usp.get("role");
 if (usp.get("mode")) mode = usp.get("mode");
+const returnTo = usp.get("returnTo");
 render();
 
-// ===== OWNER: LOGIN =====
+// ===== OWNER: LOGIN (real API) =====
 ownerLogin?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(olMsg, "Checking…");
@@ -166,14 +167,14 @@ ownerLogin?.addEventListener("submit", async (e) => {
     );
     setStatus(olMsg, "Logged in. Redirecting…", true);
 
-    setTimeout(() => window.location.assign("/ownerProfile.html"), 250);
+    setTimeout(() => window.location.assign("/ownerProfile.html"), 300);
   } catch (err) {
     console.error(err);
     setStatus(olMsg, "Network error.");
   }
 });
 
-// ===== OWNER: SIGNUP =====
+// ===== OWNER: SIGNUP (real API) =====
 ownerSignup?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(osMsg, "Saving…");
@@ -214,14 +215,14 @@ ownerSignup?.addEventListener("submit", async (e) => {
     localStorage.setItem("businessName", payload.business);
     setStatus(osMsg, "Account created. Redirecting…", true);
 
-    setTimeout(() => window.location.assign("/ownerProfile.html"), 250);
+    setTimeout(() => window.location.assign("/ownerProfile.html"), 300);
   } catch (err) {
     console.error(err);
     setStatus(osMsg, "Network error.");
   }
 });
 
-// ===== CUSTOMER (demo only, no server) =====
+// ===== CUSTOMER (demo-only; keeps returnTo logic) =====
 custLogin?.addEventListener("submit", (e) => {
   e.preventDefault();
   setStatus(clMsg, "Checking…");
@@ -236,8 +237,12 @@ custLogin?.addEventListener("submit", (e) => {
       : clUser.value.replace(/^@/, "");
     localStorage.setItem("customerName", base || "Customer");
     setStatus(clMsg, "Logged in. Redirecting…", true);
-    window.location.assign("/flashscreen.html");
-  }, 250);
+
+    setTimeout(() => {
+      if (returnTo) location.href = decodeURIComponent(returnTo);
+      else location.href = "/flashscreen.html";
+    }, 300);
+  }, 300);
 });
 
 custSignup?.addEventListener("submit", (e) => {
@@ -267,6 +272,10 @@ custSignup?.addEventListener("submit", (e) => {
       })
     );
     setStatus(csMsg, "Account created. Redirecting…", true);
-    window.location.assign("/flashscreen.html");
-  }, 250);
+
+    setTimeout(() => {
+      if (returnTo) location.href = decodeURIComponent(returnTo);
+      else location.href = "/flashscreen.html";
+    }, 300);
+  }, 300);
 });

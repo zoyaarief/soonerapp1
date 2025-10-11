@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner | Browse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/browse.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="brand"><span>Sooner</span></div>
+        <nav class="side-nav">
+          <a href="userDashboard.html" class="item"><span class="label">Home</span></a>
+          <a href="browse.html?type=restaurants" class="item"><span class="label">Restaurants</span></a>
+          <a href="browse.html?type=salons" class="item"><span class="label">Salons</span></a>
+          <a href="browse.html?type=clinics" class="item"><span class="label">Clinics</span></a>
+          <a href="browse.html?type=events" class="item"><span class="label">Events</span></a>
+          <a href="browse.html?type=services" class="item"><span class="label">UPS / Govt</span></a>
+          <a href="userProfile.html" class="item"><span class="label">Profile</span></a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="top">
+          <h1 id="title">Browse</h1>
+          <div class="filters">
+            <input id="q" placeholder="Search name, cuisine…" />
+            <select id="loc">
+              <option value="">Any location</option>
+              <option>Boston</option>
+              <option>Cambridge</option>
+              <option>Somerville</option>
+            </select>
+            <select id="price">
+              <option value="">Price</option>
+              <option value="1">$</option>
+              <option value="2">$$</option>
+              <option value="3">$$$</option>
+            </select>
+            <select id="rating">
+              <option value="">Rating</option>
+              <option value="4">4★+</option>
+              <option value="4.5">4.5★+</option>
+            </select>
+            <input id="cuisine" placeholder="Cuisine / Type" />
+            <button id="apply" class="btn">Apply</button>
+            <button id="clear" class="btn btn--ghost">Clear</button>
+          </div>
+        </header>
+
+        <section id="grid" class="cards"></section>
+
+        <footer class="foot">Tip: Use “Use my location” from dashboard for Nearby sort.</footer>
+      </main>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" aria-live="polite">
+      <div class="toast__text" id="toastText">Message</div>
+      <div class="toast__actions"><button id="toastClose" class="icon">✕</button></div>
+    </div>
+
+    <script type="module" src="./js/browse.js"></script>
+  </body>
+</html>

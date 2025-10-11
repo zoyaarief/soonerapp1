@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner | User Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/userDashboard.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <button id="sidebarToggle" class="collapse-btn" aria-label="Toggle sidebar">⟨⟩</button>
+          <span class="brand-text">Sooner</span>
+        </div>
+
+        <nav class="side-nav" id="sideNav">
+          <a href="#home" class="item active"><span class="label">Home</span></a>
+          <a href="browse.html?type=restaurants" class="item"><span class="label">Restaurants</span></a>
+          <a href="browse.html?type=salons" class="item"><span class="label">Salons</span></a>
+          <a href="browse.html?type=clinics" class="item"><span class="label">Clinics</span></a>
+          <a href="browse.html?type=events" class="item"><span class="label">Events</span></a>
+          <a href="browse.html?type=services" class="item"><span class="label">UPS / Govt</span></a>
+          <a href="userProfile.html" class="item"><span class="label">Profile</span></a>
+          <div class="spacer"></div>
+          <div class="userchip">
+            <img src="./images/default_profile.png" alt="User" />
+            <span id="customerName">Customer</span>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Main -->
+      <main class="main">
+        <header class="top" id="home">
+          <h1>Hey, <strong id="greetName">Customer</strong> 👋</h1>
+          <div class="top-right">
+            <div class="search"><input id="globalSearch" type="text" placeholder="Search places, cuisines…" /></div>
+            <img class="avatar" src="./images/default_profile.png" alt="user" />
+          </div>
+        </header>
+
+        <!-- Quick actions -->
+        <section class="pills">
+          <div class="pill">
+            <div class="pill__title">Active Queue</div>
+            <div class="pill__spark" id="pillQueue">None</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">Favorites</div>
+            <div class="pill__spark" id="pillFavs">0</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">Past Visits</div>
+            <div class="pill__spark" id="pillHistory">0</div>
+          </div>
+          <div class="pill">
+            <div class="pill__title">Nearby</div>
+            <div class="pill__spark"><button id="useLocation" class="btn btn--ghost small">Use my location</button></div>
+          </div>
+        </section>
+
+        <!-- Cards -->
+        <section class="grid">
+          <section class="card hero">
+            <img src="./images/restaurant.jpg" alt="promo" />
+            <div class="hero__body">
+              <h3>Browse top-rated spots</h3>
+              <p>Pick a category, apply filters, and hop into a live queue.</p>
+              <div class="btn-row">
+                <a href="browse.html?type=restaurants" class="btn">Explore Restaurants</a>
+                <a href="browse.html?type=clinics" class="btn btn--ghost">Clinics</a>
+                <a href="browse.html?type=salons" class="btn btn--ghost">Salons</a>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__head">
+              <h2>Continue</h2>
+              <button id="gotoActive" class="btn btn--ghost small hidden">Open</button>
+            </div>
+            <div id="continueBlock" class="muted">No active queue.</div>
+          </section>
+
+          <section class="card">
+            <div class="card__head"><h2>Favorites</h2></div>
+            <ul id="favList" class="list"></ul>
+            <div class="muted" id="favEmpty">No favorites yet.</div>
+          </section>
+
+          <section class="card span-2">
+            <div class="card__head"><h2>Recently viewed</h2></div>
+            <div id="recentRow" class="row-cards"></div>
+          </section>
+        </section>
+
+        <footer class="foot">© Sooner · demo (no database yet)</footer>
+      </main>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" aria-live="polite">
+      <div class="toast__text" id="toastText">Message</div>
+      <div class="toast__actions">
+        <button id="toastClose" class="icon">✕</button>
+      </div>
+    </div>
+
+    <script type="module" src="./js/userDashboard.js"></script>
+  </body>
+</html>

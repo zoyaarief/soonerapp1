@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sooner | Your Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/userProfile.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidenav">
+        <div class="brand">Sooner</div>
+        <nav>
+          <a href="#overview" class="navlink active">Overview</a>
+          <a href="#favorites" class="navlink">Favorites</a>
+          <a href="#history" class="navlink">History</a>
+          <a href="#account" class="navlink">Account</a>
+          <a href="#help" class="navlink">Help</a>
+          <a href="#about" class="navlink">About</a>
+        </nav>
+        <div class="userchip">
+          <img src="./images/default_profile.png" alt="User" />
+          <span id="chipName">Customer</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="crumbs">Account / <strong>Profile</strong></div>
+          <a class="btn btn--ghost" href="userDashboard.html">To Dashboard →</a>
+        </header>
+
+        <section id="overview" class="card">
+          <div class="card__header"><h2>Overview</h2></div>
+          <div class="overview__grid">
+            <div class="profile">
+              <div class="avatar"><img id="avatar" src="./images/default_profile.png" alt="Avatar" /></div>
+              <label class="filebtn">
+                Change Photo
+                <input id="avatarInput" type="file" accept="image/*" />
+              </label>
+            </div>
+            <div class="stats">
+              <div class="pill"><div class="pill__title">Favorites</div><div class="pill__spark" id="statFavs">0</div></div>
+              <div class="pill"><div class="pill__title">Past Visits</div><div class="pill__spark" id="statHistory">0</div></div>
+              <div class="pill"><div class="pill__title">Active Queue</div><div class="pill__spark" id="statActive">None</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="favorites" class="card">
+          <div class="card__header"><h2>Favorites</h2></div>
+          <ul id="favList" class="list"></ul>
+        </section>
+
+        <section id="history" class="card">
+          <div class="card__header"><h2>History</h2></div>
+          <ul id="historyList" class="list"></ul>
+        </section>
+
+        <section id="account" class="card">
+          <div class="card__header"><h2>Account</h2></div>
+          <form id="acctForm" class="form">
+            <div class="form__grid">
+              <label class="form__row"><span>Name</span><input id="name" /></label>
+              <label class="form__row"><span>Phone</span><input id="phone" /></label>
+              <label class="form__row"><span>Email</span><input id="email" /></label>
+            </div>
+            <div class="buttonrow">
+              <button class="btn" type="submit">Save</button>
+              <span id="status" class="status"></span>
+            </div>
+          </form>
+        </section>
+
+        <section id="help" class="card">
+          <div class="card__header"><h2>Help</h2></div>
+          <ul class="bullets">
+            <li><strong>Join a queue:</strong> Open a place → Enter queue.</li>
+            <li><strong>Timer:</strong> Starts when you’re 5th. You get 45 mins to arrive.</li>
+            <li><strong>Auto removal:</strong> If 45 mins pass and you aren’t let in, you’ll be removed.</li>
+            <li><strong>Notifications:</strong> We’ll notify when you enter/cancel/near turn/timed out.</li>
+          </ul>
+        </section>
+
+        <section id="about" class="card">
+          <div class="card__header"><h2>About this app</h2></div>
+          <p class="muted">Sooner helps you skip lines by joining live queues remotely. This is a local demo — data lives in your browser until we hook up the database.</p>
+        </section>
+
+        <footer class="footnote">© Sooner — locally saved demo</footer>
+      </main>
+    </div>
+
+    <script type="module" src="./js/userProfile.js"></script>
+  </body>
+</html>
