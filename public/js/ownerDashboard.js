@@ -3,9 +3,7 @@
 const API_BASE = "http://localhost:3000";
 const FETCH_CREDENTIALS = "include";
 
-/* =========================
-   Auth + greetings
-========================= */
+// -------------------- Auth + greet --------------------
 (async function guard() {
   try {
     const res = await fetch(`${API_BASE}/api/session`, {
@@ -26,9 +24,7 @@ const FETCH_CREDENTIALS = "include";
   }
 })();
 
-/* =========================
-   Avatar helpers
-========================= */
+// -------------------- helpers --------------------
 function setDashboardAvatar(src) {
   const fallback = "./images/default_profile.png";
   const finalSrc =
@@ -39,14 +35,12 @@ function setDashboardAvatar(src) {
   if (topImg) topImg.src = finalSrc;
 }
 
-// Paint avatar from cache fast
 (function paintCachedAvatarFirst() {
   const cached = localStorage.getItem("ownerAvatar");
   const fallback = "./images/default_profile.png";
   setDashboardAvatar(cached || fallback);
 })();
 
-// Hydrate avatar from server
 (async function hydrateDashboardAvatar() {
   try {
     const res = await fetch(`${API_BASE}/api/owners/me`, {
@@ -54,15 +48,12 @@ function setDashboardAvatar(src) {
       credentials: FETCH_CREDENTIALS,
     });
     if (!res.ok) return;
-
     const data = await res.json();
     const serverAvatar = data?.profile?.avatar || "";
-
     const isUseful =
       typeof serverAvatar === "string" &&
       serverAvatar.length > 0 &&
       !/default_profile\.png$/i.test(serverAvatar);
-
     if (isUseful) {
       setDashboardAvatar(serverAvatar);
       localStorage.setItem("ownerAvatar", serverAvatar);
@@ -72,7 +63,6 @@ function setDashboardAvatar(src) {
   }
 })();
 
-// Keep avatar in sync between tabs
 window.addEventListener("storage", (evt) => {
   if (evt.key === "ownerAvatar") {
     const val = evt.newValue || "./images/default_profile.png";
@@ -80,9 +70,7 @@ window.addEventListener("storage", (evt) => {
   }
 });
 
-/* =========================
-   Sidebar + nav
-========================= */
+// -------------------- Sidebar + nav --------------------
 const sidebar = document.getElementById("sidebar");
 const toggleBtn = document.getElementById("sidebarToggle");
 toggleBtn?.addEventListener("click", () => {
@@ -122,9 +110,7 @@ const observer = new IntersectionObserver(
 );
 observedEls.forEach((el) => observer.observe(el));
 
-/* =========================
-   Logout
-========================= */
+// -------------------- Logout --------------------
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   try {
     await fetch(`${API_BASE}/api/logout`, {
@@ -139,9 +125,9 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   }
 });
 
-/* =========================
-   DOM refs
-========================= */
+// ======================
+// Controls / Announcements / Queue / Chart
+// ======================
 const walkinBtn = document.getElementById("walkinBtn");
 const openCloseBtn = document.getElementById("openCloseBtn");
 const stopQueueBtn = document.getElementById("stopQueueBtn");
@@ -168,43 +154,33 @@ const mWalkins = document.getElementById("mWalkins");
 const mOpen = document.getElementById("mOpen");
 const mQueueCount = document.getElementById("mQueueCount");
 const mAvgWait = document.getElementById("mAvgWait");
+
+// Capacity line in the Queue card
 const spotsLeftEl = document.getElementById("spotsLeft");
 
-// Chart
-const canvas = document.getElementById("chart");
-const ctx = canvas?.getContext("2d");
-
-/* =========================
-   Local state (mirrors server)
-========================= */
-let walkinsEnabled = false;
-let restaurantOpen = false;
-let queueActive = true;
-
+// --------- state ---------
 let queue = [];
 let announcements = []; // server-backed
 
-let history = [];
+let settings = {
+  walkinsEnabled: false,
+  openStatus: "closed", // "open" | "closed"
+  queueActive: true,
+};
+
+let capacity = {
+  totalSeats: 0,
+  seatsUsed: 0,
+  spotsLeft: Infinity,
+};
+
 let undoStack = [];
 let lastRemoved = null;
 
-// new: settings + capacity
-let settings = {
-  walkinsEnabled: false,
-  openStatus: "closed",
-  queueActive: true,
-};
-let spotsLeft = 0;
-let totalSeats = 0;
-let seatsUsed = 0;
-
-/* =========================
-   Small helpers
-========================= */
+// --------- small helpers ---------
 function setText(node, text) {
   if (node) node.textContent = text;
 }
-
 function showToast(message, withUndo = false) {
   if (!toast || !toastText) return;
   toastText.textContent = message;
@@ -213,11 +189,10 @@ function showToast(message, withUndo = false) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => toast.classList.remove("show"), 4000);
 }
-
 function updateMetrics() {
-  setText(mWalkins, walkinsEnabled ? "Enabled" : "Disabled");
-  setText(mOpen, restaurantOpen ? "Open" : "Closed");
-  setText(mQueueCount, String(queue.length));
+  setText(mWalkins, settings.walkinsEnabled ? "Enabled" : "Disabled");
+  setText(mOpen, settings.openStatus === "open" ? "Open" : "Closed");
+  setText(mQueueCount, String(queue.length)); // total in system
   const avg = Math.round(
     (queue.reduce((a, b) => a + (Number(b.people) || 0), 0) * 8) /
       Math.max(queue.length, 1)
@@ -225,9 +200,106 @@ function updateMetrics() {
   setText(mAvgWait, `${avg}m`);
 }
 
-/* =========================
-   SERVER: Announcements
-========================= */
+// Capacity -> UI (clamps "used" to total and short-circuits when full)
+function updateSpotsLeftUI() {
+  if (!spotsLeftEl) return;
+
+  const T = Number(capacity.totalSeats || 0);
+  const usedRaw = Number(capacity.seatsUsed || 0);
+  const used = T > 0 ? Math.min(usedRaw, T) : usedRaw;
+  const left = Number.isFinite(capacity.spotsLeft) ? capacity.spotsLeft : null;
+
+  spotsLeftEl.style.color = "#6b7280"; // default gray
+
+  if (!T) {
+    spotsLeftEl.textContent = "Spots left: — (set total seats)";
+    return;
+  }
+
+  if (left !== null && left <= 0) {
+    spotsLeftEl.textContent = `Full — 0 / ${T}`;
+    spotsLeftEl.style.color = "#ef4444"; // red when full
+    return;
+  }
+
+  // When not full, show clamped used
+  spotsLeftEl.textContent = `Spots left: ${left ?? "—"} / ${T} (used: ${used})`;
+}
+
+// Given the full queue and capacity, compute the subset that actually fits now.
+// We preserve original order and stop once we would exceed the total seats.
+function visibleQueueByCapacity(fullQueue, totalSeats) {
+  if (!Number(totalSeats)) return fullQueue; // if not configured, show all
+  let sum = 0;
+  const out = [];
+  for (const q of fullQueue) {
+    const size = Number(q.people) || 0;
+    if (sum + size <= totalSeats) {
+      out.push(q);
+      sum += size;
+    } else {
+      break; // stop showing once we'd exceed capacity
+    }
+  }
+  return out;
+}
+
+// -------------------- SETTINGS fetch/apply --------------------
+async function fetchSettings() {
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      credentials: FETCH_CREDENTIALS,
+    });
+    if (!res.ok) throw new Error("settings fetch failed");
+    const data = await res.json();
+    const s = data?.settings || {};
+    settings.walkinsEnabled = !!s.walkinsEnabled;
+    settings.openStatus = s.openStatus === "open" ? "open" : "closed";
+    settings.queueActive = s.queueActive !== false;
+    applySettingsToUI();
+  } catch (e) {
+    console.warn("fetchSettings error:", e);
+  }
+}
+
+function applySettingsToUI() {
+  // Walk-ins button text
+  if (walkinBtn) {
+    walkinBtn.textContent = settings.walkinsEnabled
+      ? "Disable Walk-ins"
+      : "Enable Walk-ins";
+  }
+
+  // Open/Close button text
+  if (openCloseBtn) {
+    openCloseBtn.textContent =
+      settings.openStatus === "open" ? "Close" : "Open";
+  }
+
+  // Stop/Restart visibility
+  if (stopQueueBtn && restartQueueBtn) {
+    if (settings.queueActive) {
+      stopQueueBtn.classList.remove("hidden");
+      restartQueueBtn.classList.add("hidden");
+    } else {
+      stopQueueBtn.classList.add("hidden");
+      restartQueueBtn.classList.remove("hidden");
+    }
+  }
+
+  // If queue is stopped, show notice; else show capacity
+  if (!settings.queueActive && spotsLeftEl) {
+    spotsLeftEl.textContent = "Queue stopped for the day";
+    spotsLeftEl.style.color = "#ef4444";
+  } else {
+    updateSpotsLeftUI();
+  }
+
+  updateMetrics();
+  renderQueue();
+}
+
+// -------------------- SERVER FETCHERS --------------------
 async function fetchAnnouncements() {
   try {
     const res = await fetch(`${API_BASE}/api/announcements`, {
@@ -244,6 +316,42 @@ async function fetchAnnouncements() {
   }
 }
 
+async function fetchQueue() {
+  try {
+    const res = await fetch(`${API_BASE}/api/queue`, {
+      credentials: FETCH_CREDENTIALS,
+    });
+    if (!res.ok) throw new Error("queue fetch failed");
+    const data = await res.json();
+
+    queue = Array.isArray(data.queue) ? data.queue : [];
+
+    // Capacity snapshot from server
+    capacity.totalSeats = Number(data.totalSeats || 0);
+    capacity.seatsUsed = Number(data.seatsUsed || 0);
+    capacity.spotsLeft = Number.isFinite(Number(data.spotsLeft))
+      ? Number(data.spotsLeft)
+      : Infinity;
+    updateSpotsLeftUI();
+
+    // Settings (authoritative)
+    if (data.settings) {
+      settings.walkinsEnabled = !!data.settings.walkinsEnabled;
+      settings.openStatus =
+        data.settings.openStatus === "open" ? "open" : "closed";
+      settings.queueActive = !!data.settings.queueActive;
+    }
+
+    renderQueue();
+    applySettingsToUI();
+  } catch (e) {
+    console.warn("fetchQueue error:", e);
+    queue = [];
+    renderQueue();
+  }
+}
+
+// -------------------- RENDERERS --------------------
 function renderAnnouncements() {
   if (!announceList) return;
   announceList.innerHTML = "";
@@ -260,6 +368,240 @@ function renderAnnouncements() {
   });
 }
 
+function renderUndoList() {
+  if (!undoList) return;
+  undoList.innerHTML = "";
+  if (!undoStack.length) {
+    undoList.innerHTML = `<p class="meta">No recent removals.</p>`;
+    return;
+  }
+  undoStack.forEach((u, idx) => {
+    const leftMs = Math.max(0, u.timestamp + 5 * 60 * 1000 - Date.now());
+    const leftMin = Math.floor(leftMs / 60000);
+    const leftSec = Math.floor((leftMs % 60000) / 1000);
+    const row = document.createElement("div");
+    row.className = "undo-item";
+    row.innerHTML = `
+      <div>
+        <strong>${u.item.name}</strong>
+        <div class="meta">${u.item.people} people • expires in ${leftMin}m ${leftSec}s</div>
+      </div>
+      <div>
+        <button class="btn btn--ghost" data-undo="${idx}">Undo</button>
+      </div>
+    `;
+    undoList.appendChild(row);
+  });
+}
+setInterval(() => {
+  if (modal && !modal.classList.contains("hidden")) renderUndoList();
+}, 1000);
+function addToUndoStack(item) {
+  const timestamp = Date.now();
+  undoStack.push({ item, timestamp });
+  setTimeout(
+    () => {
+      undoStack = undoStack.filter((u) => u.item._id !== item._id);
+      if (modal && !modal.classList.contains("hidden")) renderUndoList();
+    },
+    5 * 60 * 1000
+  );
+}
+
+function renderQueue() {
+  if (!queueList) return;
+  queueList.innerHTML = "";
+
+  if (!settings.queueActive) {
+    queueList.innerHTML =
+      "<p style='color:#ef4444'>Queue stopped for the day.</p>";
+    updateMetrics();
+    drawChart();
+    return;
+  }
+
+  const totalSeats = Number(capacity.totalSeats || 0);
+
+  // Only render the parties that fit entirely into totalSeats (cumulative)
+  const visible = visibleQueueByCapacity(queue, totalSeats);
+  const hiddenCount = Math.max(queue.length - visible.length, 0);
+
+  if (!visible.length) {
+    queueList.innerHTML =
+      "<p style='color:#6B7280'>No one currently in queue.</p>";
+  } else {
+    visible.forEach((q) => {
+      const row = document.createElement("div");
+      row.className = "queue-item";
+      row.innerHTML = `
+        <span>${q.position}. ${q.name} (${q.people} people)</span>
+        <input type="checkbox" class="checkbox" data-id="${q._id}" aria-label="Mark served">
+      `;
+      queueList.appendChild(row);
+    });
+
+    if (hiddenCount > 0) {
+      const more = document.createElement("div");
+      more.className = "meta";
+      more.style.cssText = "color:#6B7280;margin-top:8px;";
+      more.textContent = `…and ${hiddenCount} more waiting`;
+      queueList.appendChild(more);
+    }
+  }
+
+  updateMetrics();
+  drawChart();
+}
+
+// -------------------- MODAL --------------------
+function openModal() {
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  renderUndoList();
+}
+function closeModal() {
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+// -------------------- CONTROLS (SERVER-BACKED) --------------------
+
+// Walk-ins toggle
+walkinBtn?.addEventListener("click", async () => {
+  try {
+    const next = !settings.walkinsEnabled;
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      credentials: FETCH_CREDENTIALS,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walkinsEnabled: next }),
+    });
+    if (!res.ok) throw new Error("settings save failed");
+    const data = await res.json();
+    settings.walkinsEnabled = !!data.settings.walkinsEnabled;
+    applySettingsToUI();
+    showToast(`Walk-ins ${settings.walkinsEnabled ? "enabled" : "disabled"}`);
+  } catch (e) {
+    console.warn(e);
+    showToast("Failed to update walk-ins");
+  }
+});
+
+// Open/Close toggle
+openCloseBtn?.addEventListener("click", async () => {
+  try {
+    const next = settings.openStatus === "open" ? "closed" : "open";
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      credentials: FETCH_CREDENTIALS,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openStatus: next }),
+    });
+    if (!res.ok) throw new Error("settings save failed");
+    const data = await res.json();
+    settings.openStatus = data.settings.openStatus;
+    applySettingsToUI();
+    showToast(
+      `Restaurant set to ${settings.openStatus === "open" ? "Open" : "Closed"}`
+    );
+  } catch (e) {
+    console.warn(e);
+    showToast("Failed to update open status");
+  }
+});
+
+// Stop / Restart (persisted)
+stopQueueBtn?.addEventListener("click", async () => {
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      credentials: FETCH_CREDENTIALS,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queueActive: false }),
+    });
+    if (!res.ok) throw new Error("settings save failed");
+    const data = await res.json();
+    settings.queueActive = !!data.settings.queueActive;
+    applySettingsToUI();
+    showToast("Queue stopped for the day");
+  } catch (e) {
+    console.warn(e);
+    showToast("Failed to stop queue");
+  }
+});
+
+restartQueueBtn?.addEventListener("click", async () => {
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      credentials: FETCH_CREDENTIALS,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queueActive: true }),
+    });
+    if (!res.ok) throw new Error("settings save failed");
+    const data = await res.json();
+    settings.queueActive = !!data.settings.queueActive;
+    applySettingsToUI();
+    showToast("Queue restarted");
+  } catch (e) {
+    console.warn(e);
+    showToast("Failed to restart queue");
+  }
+});
+
+// -------------------- SSE (live queue) with polling fallback --------------------
+let es;
+function startQueueStream() {
+  if (!window.EventSource) {
+    setInterval(fetchQueue, 5000);
+    return;
+  }
+  es = new EventSource(`${API_BASE}/api/queue/stream`, {
+    withCredentials: true,
+  });
+
+  es.addEventListener("snapshot", (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+
+      // Update queue
+      queue = Array.isArray(data.queue) ? data.queue : [];
+
+      // Update capacity snapshot from server
+      capacity.totalSeats = Number(data.totalSeats || 0);
+      capacity.seatsUsed = Number(data.seatsUsed || 0);
+      capacity.spotsLeft = Number.isFinite(Number(data.spotsLeft))
+        ? Number(data.spotsLeft)
+        : Infinity;
+      updateSpotsLeftUI();
+
+      // Settings from stream (authoritative)
+      if (data.settings) {
+        settings.walkinsEnabled = !!data.settings.walkinsEnabled;
+        settings.openStatus =
+          data.settings.openStatus === "open" ? "open" : "closed";
+        settings.queueActive = !!data.settings.queueActive;
+      }
+
+      renderQueue();
+      applySettingsToUI();
+    } catch (e) {
+      console.warn("SSE parse error:", e);
+    }
+  });
+
+  es.onerror = () => {
+    console.warn("SSE dropped; falling back to polling");
+    try {
+      es.close();
+    } catch {}
+    setInterval(fetchQueue, 5000);
+  };
+}
+
+// -------------------- Announcements (SERVER) --------------------
 announceBtn?.addEventListener("click", async () => {
   const val = announcementInput?.value?.trim() || "";
   if (!val) {
@@ -302,278 +644,9 @@ announceList?.addEventListener("click", async (e) => {
   }
 });
 
-/* =========================
-   SERVER: Settings
-========================= */
-async function fetchSettings() {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) throw new Error("settings fetch failed");
-    const data = await res.json();
-    settings = data.settings || settings;
-
-    // Reflect on local flags
-    walkinsEnabled = !!settings.walkinsEnabled;
-    restaurantOpen = settings.openStatus === "open";
-    queueActive = !!settings.queueActive;
-
-    // Paint buttons
-    if (walkinBtn)
-      walkinBtn.textContent = walkinsEnabled
-        ? "Disable Walk-ins"
-        : "Enable Walk-ins";
-    if (openCloseBtn)
-      openCloseBtn.textContent = restaurantOpen ? "Close" : "Open";
-
-    if (queueActive) {
-      stopQueueBtn?.classList.remove("hidden");
-      restartQueueBtn?.classList.add("hidden");
-    } else {
-      stopQueueBtn?.classList.add("hidden");
-      restartQueueBtn?.classList.remove("hidden");
-    }
-
-    updateMetrics();
-  } catch (e) {
-    console.warn("fetchSettings error:", e);
-  }
-}
-
-async function putSettings(patch) {
-  const res = await fetch(`${API_BASE}/api/settings`, {
-    method: "PUT",
-    credentials: FETCH_CREDENTIALS,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) throw new Error("settings update failed");
-  const data = await res.json();
-  settings = data.settings || settings;
-
-  // mirror to local flags
-  walkinsEnabled = !!settings.walkinsEnabled;
-  restaurantOpen = settings.openStatus === "open";
-  queueActive = !!settings.queueActive;
-
-  // paint buttons after update
-  if (walkinBtn)
-    walkinBtn.textContent = walkinsEnabled
-      ? "Disable Walk-ins"
-      : "Enable Walk-ins";
-  if (openCloseBtn)
-    openCloseBtn.textContent = restaurantOpen ? "Close" : "Open";
-
-  if (queueActive) {
-    stopQueueBtn?.classList.remove("hidden");
-    restartQueueBtn?.classList.add("hidden");
-  } else {
-    stopQueueBtn?.classList.add("hidden");
-    restartQueueBtn?.classList.remove("hidden");
-  }
-
-  updateMetrics();
-}
-
-/* =========================
-   SERVER: Queue
-========================= */
-async function fetchQueue() {
-  try {
-    const res = await fetch(`${API_BASE}/api/queue`, {
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) throw new Error("queue fetch failed");
-    const data = await res.json();
-
-    queue = Array.isArray(data.queue) ? data.queue : [];
-    spotsLeft = Number(data.spotsLeft ?? 0);
-    totalSeats = Number(data.totalSeats ?? 0);
-    seatsUsed = Number(data.seatsUsed ?? 0);
-
-    if (data.settings) {
-      settings = data.settings;
-      walkinsEnabled = !!settings.walkinsEnabled;
-      restaurantOpen = settings.openStatus === "open";
-      queueActive = !!settings.queueActive;
-    }
-
-    renderQueue();
-  } catch (e) {
-    console.warn("fetchQueue error:", e);
-    queue = [];
-    renderQueue();
-  }
-}
-
-/* =========================
-   Renderers
-========================= */
-function renderUndoList() {
-  if (!undoList) return;
-  undoList.innerHTML = "";
-  if (!undoStack.length) {
-    undoList.innerHTML = `<p class="meta">No recent removals.</p>`;
-    return;
-  }
-  undoStack.forEach((u, idx) => {
-    const leftMs = Math.max(0, u.timestamp + 5 * 60 * 1000 - Date.now());
-    const leftMin = Math.floor(leftMs / 60000);
-    const leftSec = Math.floor((leftMs % 60000) / 1000);
-    const row = document.createElement("div");
-    row.className = "undo-item";
-    row.innerHTML = `
-      <div>
-        <strong>${u.item.name}</strong>
-        <div class="meta">${u.item.people} people • expires in ${leftMin}m ${leftSec}s</div>
-      </div>
-      <div>
-        <button class="btn btn--ghost" data-undo="${idx}">Undo</button>
-      </div>
-    `;
-    undoList.appendChild(row);
-  });
-}
-setInterval(() => {
-  if (modal && !modal.classList.contains("hidden")) renderUndoList();
-}, 1000);
-
-function addToUndoStack(item) {
-  const timestamp = Date.now();
-  undoStack.push({ item, timestamp });
-  setTimeout(
-    () => {
-      undoStack = undoStack.filter((u) => u.item._id !== item._id);
-      if (modal && !modal.classList.contains("hidden")) renderUndoList();
-    },
-    5 * 60 * 1000
-  );
-}
-
-function renderQueue() {
-  // spots left label
-  if (spotsLeftEl) {
-    spotsLeftEl.textContent =
-      totalSeats > 0
-        ? `Spots left: ${spotsLeft} / ${totalSeats} (used: ${seatsUsed})`
-        : `Spots left: —`;
-  }
-
-  if (!queueList) return;
-  queueList.innerHTML = "";
-
-  if (!queueActive) {
-    queueList.innerHTML =
-      "<p style='color:#ef4444'>Queue stopped for the day.</p>";
-    updateMetrics();
-    drawChart();
-    return;
-  }
-
-  if (!queue.length) {
-    queueList.innerHTML =
-      "<p style='color:#6B7280'>No one currently in queue.</p>";
-    updateMetrics();
-    drawChart();
-    return;
-  }
-
-  queue.forEach((q) => {
-    const row = document.createElement("div");
-    row.className = "queue-item";
-    const disabledAttr = queueActive ? "" : "disabled";
-    row.innerHTML = `
-      <span>${q.position}. ${q.name} (${q.people} people)</span>
-      <input type="checkbox" class="checkbox" data-id="${q._id}" aria-label="Mark served" ${disabledAttr}>
-    `;
-    queueList.appendChild(row);
-  });
-
-  updateMetrics();
-  drawChart();
-}
-
-/* =========================
-   Modal
-========================= */
-function openModal() {
-  if (!modal) return;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
-  renderUndoList();
-}
-function closeModal() {
-  if (!modal) return;
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
-}
-
-undoBtn?.addEventListener("click", openModal);
-modalClose?.addEventListener("click", closeModal);
-modalClose2?.addEventListener("click", closeModal);
-modal?.addEventListener("click", (e) => {
-  if (e.target === modal) closeModal();
-});
-
-/* =========================
-   Controls (persist to /api/settings)
-========================= */
-walkinBtn?.addEventListener("click", async () => {
-  try {
-    await putSettings({ walkinsEnabled: !walkinsEnabled });
-    walkinBtn.textContent = walkinsEnabled
-      ? "Disable Walk-ins"
-      : "Enable Walk-ins";
-    showToast(`Walk-ins ${walkinsEnabled ? "enabled" : "disabled"}`);
-  } catch {
-    showToast("Failed to update walk-ins");
-  }
-});
-
-openCloseBtn?.addEventListener("click", async () => {
-  try {
-    const next = restaurantOpen ? "closed" : "open";
-    await putSettings({ openStatus: next });
-    openCloseBtn.textContent = restaurantOpen ? "Close" : "Open";
-    showToast(`Restaurant set to ${restaurantOpen ? "Open" : "Closed"}`);
-  } catch {
-    showToast("Failed to update open status");
-  }
-});
-
-if (stopQueueBtn) {
-  stopQueueBtn.addEventListener("click", async () => {
-    try {
-      await putSettings({ queueActive: false });
-      stopQueueBtn.classList.add("hidden");
-      restartQueueBtn?.classList.remove("hidden");
-      renderQueue();
-      showToast("Queue stopped for the day");
-    } catch {
-      showToast("Failed to stop queue");
-    }
-  });
-}
-if (restartQueueBtn) {
-  restartQueueBtn.addEventListener("click", async () => {
-    try {
-      await putSettings({ queueActive: true });
-      stopQueueBtn?.classList.remove("hidden");
-      restartQueueBtn.classList.add("hidden");
-      renderQueue();
-      showToast("Queue restarted");
-    } catch {
-      showToast("Failed to restart queue");
-    }
-  });
-}
-
-/* =========================
-   Queue actions (serve/undo)
-========================= */
+// -------------------- Queue actions (SERVER) --------------------
 queueList?.addEventListener("change", async (e) => {
-  if (e.target.matches(".checkbox") && queueActive) {
+  if (e.target.matches(".checkbox") && settings.queueActive) {
     const id = e.target.dataset.id;
     try {
       const res = await fetch(`${API_BASE}/api/queue/serve`, {
@@ -588,7 +661,7 @@ queueList?.addEventListener("change", async (e) => {
         addToUndoStack(removed);
         lastRemoved = removed;
       }
-      await fetchQueue();
+      await fetchQueue(); // will cause visible list to refill up to capacity
       showToast(`Removed ${removed?.name ?? "guest"}`, true);
     } catch (err) {
       console.warn(err);
@@ -598,7 +671,7 @@ queueList?.addEventListener("change", async (e) => {
   }
 });
 
-// Toast + Modal UNDO (server restore)
+// Toast + Modal actions (SERVER restore)
 toastUndo?.addEventListener("click", async () => {
   if (!lastRemoved) return;
   try {
@@ -618,7 +691,12 @@ toastUndo?.addEventListener("click", async () => {
   }
 });
 toastClose?.addEventListener("click", () => toast.classList.remove("show"));
-
+undoBtn?.addEventListener("click", openModal);
+modalClose?.addEventListener("click", closeModal);
+modalClose2?.addEventListener("click", closeModal);
+modal?.addEventListener("click", (e) => {
+  if (e.target === modal) closeModal();
+});
 undoList?.addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-undo]");
   if (!btn) return;
@@ -642,55 +720,9 @@ undoList?.addEventListener("click", async (e) => {
   }
 });
 
-/* =========================
-   SSE for live updates (with polling fallback)
-========================= */
-let es;
-function startQueueStream() {
-  if (!window.EventSource) {
-    // fallback: poll
-    setInterval(fetchQueue, 5000);
-    return;
-  }
-
-  es = new EventSource(`${API_BASE}/api/queue/stream`, {
-    withCredentials: true,
-  });
-
-  es.addEventListener("snapshot", (evt) => {
-    try {
-      const data = JSON.parse(evt.data);
-
-      queue = Array.isArray(data.queue) ? data.queue : [];
-      spotsLeft = Number(data.spotsLeft ?? 0);
-      totalSeats = Number(data.totalSeats ?? 0);
-      seatsUsed = Number(data.seatsUsed ?? 0);
-
-      if (data.settings) {
-        settings = data.settings;
-        walkinsEnabled = !!settings.walkinsEnabled;
-        restaurantOpen = settings.openStatus === "open";
-        queueActive = !!settings.queueActive;
-      }
-
-      renderQueue();
-    } catch (e) {
-      console.warn("SSE parse error:", e);
-    }
-  });
-
-  es.onerror = () => {
-    console.warn("SSE dropped; falling back to polling");
-    try {
-      es.close();
-    } catch {}
-    setInterval(fetchQueue, 5000);
-  };
-}
-
-/* =========================
-   Chart (tiny custom bars)
-========================= */
+// -------------------- Chart --------------------
+const canvas = document.getElementById("chart");
+const ctx = canvas?.getContext("2d");
 function drawChart() {
   if (!canvas || !ctx) return;
   const w = canvas.clientWidth,
@@ -705,24 +737,24 @@ function drawChart() {
     scale = (h - 30) / maxPeople;
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = "#8B5CF6";
-  queue.forEach((q, i) => {
-    const ppl = Number(q.people) || 0;
-    const x = i * (barW + gap) + 40;
-    const y = h - ppl * scale - 14;
-    ctx.fillRect(x, y, barW, ppl * scale);
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "12px Plus Jakarta Sans";
-    ctx.fillText(ppl, x + 5, y - 4);
-    ctx.fillStyle = "#8B5CF6";
-  });
+  visibleQueueByCapacity(queue, Number(capacity.totalSeats || 0)).forEach(
+    (q, i) => {
+      const ppl = Number(q.people) || 0;
+      const x = i * (barW + gap) + 40;
+      const y = h - ppl * scale - 14;
+      ctx.fillRect(x, y, barW, ppl * scale);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "12px Plus Jakarta Sans";
+      ctx.fillText(ppl, x + 5, y - 4);
+      ctx.fillStyle = "#8B5CF6";
+    }
+  );
 }
 
-/* =========================
-   Init
-========================= */
+// -------------------- Init --------------------
 (async function init() {
-  await fetchSettings(); // load server settings first
+  await fetchSettings(); // settings first
   await fetchAnnouncements();
-  await fetchQueue(); // first paint quickly
-  startQueueStream(); // keep it fresh without refresh
+  await fetchQueue();
+  startQueueStream();
 })();
