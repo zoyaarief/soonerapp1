@@ -1,54 +1,50 @@
-// ===== Session & greeting =====
-const businessName = localStorage.getItem("businessName") || "Business Name";
-document.getElementById("businessName").textContent = businessName;
-document.getElementById("greetName").textContent = businessName;
+// public/js/ownerDashboard.js
 
-// ===== Sidebar: collapse & active behavior =====
-const sidebar = document.getElementById("sidebar");
-const toggleBtn = document.getElementById("sidebarToggle");
-if (toggleBtn) {
-  toggleBtn.addEventListener("click", () => {
-    sidebar?.classList.toggle("collapsed");
-  });
-}
-
-// Side nav links (only internal anchors get smooth scroll)
-const sideLinks = [...document.querySelectorAll(".side-nav .item")];
-sideLinks.forEach((link) => {
-  const href = link.getAttribute("href");
-  if (href && href.startsWith("#")) {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      const id = href.slice(1);
-      const el = document.getElementById(id);
-      if (el) window.scrollTo({ top: el.offsetTop - 10, behavior: "smooth" });
+// Guard (include credentials if cross-origin)
+(async function guard() {
+  try {
+    const res = await fetch("http://localhost:3000/api/session", {
+      method: "GET",
+      credentials: "include",
     });
+    if (!res.ok) {
+      location.href = "ownerSignUp.html?role=owner&mode=login";
+      return;
+    }
+    const data = await res.json();
+    localStorage.setItem("businessName", data.business || "Business");
+    const greet = document.getElementById("greetName");
+    const bname = document.getElementById("businessName");
+    if (greet) greet.textContent = data.business || "Business Name";
+    if (bname) bname.textContent = data.business || "Business Name";
+  } catch {
+    location.href = "ownerSignUp.html?role=owner&mode=login";
+  }
+})();
+
+// Sidebar collapse
+const sidebar = document.getElementById("sidebar");
+document.getElementById("sidebarToggle")?.addEventListener("click", () => {
+  sidebar?.classList.toggle("collapsed");
+});
+
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try {
+    await fetch("http://localhost:3000/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    localStorage.removeItem("businessName");
+    localStorage.removeItem("role");
+    location.href = "ownerSignUp.html?role=owner&mode=login";
   }
 });
 
-// Active state using IntersectionObserver (observe only existing sections in nav)
-const observedIds = ["home", "statsCard"]; // dashboard & stats in nav
-const observedEls = observedIds
-  .map((id) => document.getElementById(id))
-  .filter(Boolean);
-
-const observer = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        const id = entry.target.id;
-        sideLinks.forEach((a) => {
-          const href = a.getAttribute("href");
-          a.classList.toggle("active", href === `#${id}`);
-        });
-      }
-    });
-  },
-  { root: null, rootMargin: "-30% 0px -60% 0px", threshold: 0.0 }
-);
-observedEls.forEach((el) => observer.observe(el));
-
-// ===== Elements (DECLARE ONCE) =====
+// ----- Dashboard behavior (same as before) -----
 const walkinBtn = document.getElementById("walkinBtn");
 const openCloseBtn = document.getElementById("openCloseBtn");
 const stopQueueBtn = document.getElementById("stopQueueBtn");
@@ -78,7 +74,7 @@ const mOpen = document.getElementById("mOpen");
 const mQueueCount = document.getElementById("mQueueCount");
 const mAvgWait = document.getElementById("mAvgWait");
 
-// ===== State =====
+// State
 let walkinsEnabled = false;
 let restaurantOpen = false;
 let queueActive = true;
@@ -157,11 +153,11 @@ let queue = [
 ];
 
 let history = [];
-let undoStack = []; // [{ item, timestamp }]
+let undoStack = [];
 let lastRemoved = null;
 let announcements = JSON.parse(localStorage.getItem("announcements") || "[]");
 
-// ===== Helpers =====
+// Helpers
 function setText(node, text) {
   if (node) node.textContent = text;
 }
@@ -173,7 +169,6 @@ function showToast(message, withUndo = false) {
   clearTimeout(showToast._t);
   showToast._t = setTimeout(() => toast.classList.remove("show"), 4000);
 }
-
 function updateMetrics() {
   setText(mWalkins, walkinsEnabled ? "Enabled" : "Disabled");
   setText(mOpen, restaurantOpen ? "Open" : "Closed");
@@ -183,7 +178,6 @@ function updateMetrics() {
   );
   setText(mAvgWait, `${avg}m`);
 }
-
 function renderAnnouncements() {
   if (!announceList) return;
   announceList.innerHTML = "";
@@ -194,23 +188,19 @@ function renderAnnouncements() {
       <p>${txt}</p>
       <div class="announce-actions">
         <button class="btn btn--ghost small" data-remove="${i}">Remove</button>
-      </div>
-    `;
+      </div>`;
     announceList.appendChild(li);
   });
   localStorage.setItem("announcements", JSON.stringify(announcements));
 }
-
 function openModal() {
-  if (!modal) return;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
+  modal?.classList.remove("hidden");
+  modal?.setAttribute("aria-hidden", "false");
   renderUndoList();
 }
 function closeModal() {
-  if (!modal) return;
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
+  modal?.classList.add("hidden");
+  modal?.setAttribute("aria-hidden", "true");
 }
 function renderUndoList() {
   if (!undoList) return;
@@ -230,23 +220,15 @@ function renderUndoList() {
         <strong>${u.item.name}</strong>
         <div class="meta">${u.item.people} people • expires in ${leftMin}m ${leftSec}s</div>
       </div>
-      <div>
-        <button class="btn btn--ghost" data-undo="${idx}">Undo</button>
-      </div>
-    `;
+      <div><button class="btn btn--ghost" data-undo="${idx}">Undo</button></div>`;
     undoList.appendChild(row);
   });
 }
-
-// keep modal countdown fresh
 setInterval(() => {
   if (modal && !modal.classList.contains("hidden")) renderUndoList();
 }, 1000);
-
 function addToUndoStack(item) {
-  const timestamp = Date.now();
-  undoStack.push({ item, timestamp });
-  // expire after 5 min
+  undoStack.push({ item, timestamp: Date.now() });
   setTimeout(
     () => {
       undoStack = undoStack.filter((u) => u.item.email !== item.email);
@@ -256,7 +238,7 @@ function addToUndoStack(item) {
   );
 }
 
-// ===== Render Queue =====
+// Render Queue
 function renderQueue() {
   if (!queueList) return;
   queueList.innerHTML = "";
@@ -274,40 +256,33 @@ function renderQueue() {
     drawChart();
     return;
   }
-
   queue.forEach((q) => {
     const row = document.createElement("div");
     row.className = "queue-item";
     row.innerHTML = `
       <span>${q.position}. ${q.name} (${q.people} people)</span>
-      <input type="checkbox" class="checkbox" data-email="${q.email}" aria-label="Mark served">
-    `;
+      <input type="checkbox" class="checkbox" data-email="${q.email}" aria-label="Mark served">`;
     queueList.appendChild(row);
   });
-
   updateMetrics();
   drawChart();
 }
 
-// ===== Controls (USING THE SINGLE DECLARATIONS ABOVE) =====
-if (walkinBtn) {
-  walkinBtn.addEventListener("click", () => {
-    walkinsEnabled = !walkinsEnabled;
-    walkinBtn.textContent = walkinsEnabled
-      ? "Disable Walk-ins"
-      : "Enable Walk-ins";
-    showToast(`Walk-ins ${walkinsEnabled ? "enabled" : "disabled"}`);
-    updateMetrics();
-  });
-}
-if (openCloseBtn) {
-  openCloseBtn.addEventListener("click", () => {
-    restaurantOpen = !restaurantOpen;
-    openCloseBtn.textContent = restaurantOpen ? "Close" : "Open";
-    showToast(`Restaurant set to ${restaurantOpen ? "Open" : "Closed"}`);
-    updateMetrics();
-  });
-}
+// Controls
+walkinBtn?.addEventListener("click", () => {
+  walkinsEnabled = !walkinsEnabled;
+  walkinBtn.textContent = walkinsEnabled
+    ? "Disable Walk-ins"
+    : "Enable Walk-ins";
+  showToast(`Walk-ins ${walkinsEnabled ? "enabled" : "disabled"}`);
+  updateMetrics();
+});
+openCloseBtn?.addEventListener("click", () => {
+  restaurantOpen = !restaurantOpen;
+  openCloseBtn.textContent = restaurantOpen ? "Close" : "Open";
+  showToast(`Restaurant set to ${restaurantOpen ? "Open" : "Closed"}`);
+  updateMetrics();
+});
 if (stopQueueBtn && restartQueueBtn) {
   stopQueueBtn.addEventListener("click", () => {
     queueActive = false;
@@ -325,95 +300,78 @@ if (stopQueueBtn && restartQueueBtn) {
   });
 }
 
-// Announcements: add + remove
-if (announceBtn) {
-  announceBtn.addEventListener("click", () => {
-    const val =
-      announcementInput && "value" in announcementInput
-        ? announcementInput.value.trim()
-        : "";
-    if (!val) {
-      showToast("Type an announcement first");
-      return;
-    }
-    announcements.unshift(val);
-    if (announcementInput) announcementInput.value = "";
-    renderAnnouncements();
-    showToast("Announcement added");
-  });
-}
-if (announceList) {
-  announceList.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-remove]");
-    if (!btn) return;
-    const idx = Number(btn.getAttribute("data-remove"));
-    announcements.splice(idx, 1);
-    renderAnnouncements();
-    showToast("Announcement removed");
-  });
-}
+// Announcements
+announceBtn?.addEventListener("click", () => {
+  const val = announcementInput?.value.trim() || "";
+  if (!val) {
+    showToast("Type an announcement first");
+    return;
+  }
+  announcements.unshift(val);
+  if (announcementInput) announcementInput.value = "";
+  renderAnnouncements();
+  showToast("Announcement added");
+});
+announceList?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-remove]");
+  if (!btn) return;
+  const idx = Number(btn.getAttribute("data-remove"));
+  announcements.splice(idx, 1);
+  renderAnnouncements();
+  showToast("Announcement removed");
+});
 
-// Queue: check to remove
-if (queueList) {
-  queueList.addEventListener("change", (e) => {
-    if (e.target.matches(".checkbox") && queueActive) {
-      const email = e.target.dataset.email;
-      const i = queue.findIndex((q) => q.email === email);
-      if (i > -1) {
-        const removed = queue.splice(i, 1)[0];
-        removed.position = history.length + 1;
-        history.push(removed);
-        addToUndoStack(removed);
-        lastRemoved = removed;
-        renderQueue();
-        showToast(`Removed ${removed.name}`, true);
-      }
+// Queue checkbox → remove + toast/undo
+queueList?.addEventListener("change", (e) => {
+  if (e.target.matches(".checkbox") && queueActive) {
+    const email = e.target.dataset.email;
+    const i = queue.findIndex((q) => q.email === email);
+    if (i > -1) {
+      const removed = queue.splice(i, 1)[0];
+      removed.position = history.length + 1;
+      history.push(removed);
+      addToUndoStack(removed);
+      lastRemoved = removed;
+      renderQueue();
+      showToast(`Removed ${removed.name}`, true);
     }
-  });
-}
+  }
+});
 
 // Toast actions
-if (toastUndo) {
-  toastUndo.addEventListener("click", () => {
-    if (!lastRemoved) return;
-    queue.push(lastRemoved);
-    queue.sort((a, b) => a.position - b.position);
-    undoStack = undoStack.filter((u) => u.item.email !== lastRemoved.email);
-    renderQueue();
-    showToast(`${lastRemoved.name} restored`);
-    lastRemoved = null;
-  });
-}
-if (toastClose) {
-  toastClose.addEventListener("click", () => toast.classList.remove("show"));
-}
+toastUndo?.addEventListener("click", () => {
+  if (!lastRemoved) return;
+  queue.push(lastRemoved);
+  queue.sort((a, b) => a.position - b.position);
+  undoStack = undoStack.filter((u) => u.item.email !== lastRemoved.email);
+  renderQueue();
+  showToast(`${lastRemoved.name} restored`);
+  lastRemoved = null;
+});
+toastClose?.addEventListener("click", () => toast.classList.remove("show"));
 
-// Undo Center Modal
-if (undoBtn) undoBtn.addEventListener("click", openModal);
-if (modalClose) modalClose.addEventListener("click", closeModal);
-if (modalClose2) modalClose2.addEventListener("click", closeModal);
-if (modal) {
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal();
-  });
-}
-if (undoList) {
-  undoList.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-undo]");
-    if (!btn) return;
-    const idx = Number(btn.getAttribute("data-undo"));
-    const u = undoStack[idx];
-    if (!u) return;
-    queue.push(u.item);
-    queue.sort((a, b) => a.position - b.position);
-    undoStack.splice(idx, 1);
-    renderQueue();
-    renderUndoList();
-    showToast(`${u.item.name} restored`);
-  });
-}
+// Undo modal
+undoBtn?.addEventListener("click", openModal);
+modalClose?.addEventListener("click", closeModal);
+modalClose2?.addEventListener("click", closeModal);
+modal?.addEventListener("click", (e) => {
+  if (e.target === modal) closeModal();
+});
+undoList?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-undo]");
+  if (!btn) return;
+  const idx = Number(btn.getAttribute("data-undo"));
+  const u = undoStack[idx];
+  if (!u) return;
+  queue.push(u.item);
+  queue.sort((a, b) => a.position - b.position);
+  undoStack.splice(idx, 1);
+  renderQueue();
+  renderUndoList();
+  showToast(`${u.item.name} restored`);
+});
 
-// ===== Chart =====
+// Chart
 const canvas = document.getElementById("chart");
 const ctx = canvas?.getContext("2d");
 function drawChart() {

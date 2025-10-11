@@ -1,13 +1,35 @@
+// public/js/ownerProfile.js
+
+// Guard: must be logged-in owner (cross-origin: include credentials)
+(async function guard() {
+  try {
+    const res = await fetch("http://localhost:3000/api/session", {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      location.href = "ownerSignUp.html?role=owner&mode=login";
+      return;
+    }
+    const data = await res.json();
+    localStorage.setItem("businessName", data.business || "Business");
+    const b1 = document.getElementById("businessName");
+    if (b1) b1.textContent = data.business || "Business Name";
+  } catch {
+    location.href = "ownerSignUp.html?role=owner&mode=login";
+  }
+})();
+
 // Session name → top chips
 const businessName = localStorage.getItem("businessName") || "Business Name";
 document.getElementById("businessName").textContent = businessName;
 
-// Quick nav active state on scroll
+// Quick nav active state on scroll (profile sections)
 const links = document.querySelectorAll(".navlink");
 const sections = [...document.querySelectorAll("section.card")];
 const setActive = () => {
   const y = window.scrollY + 120;
-  let current = sections[0].id;
+  let current = sections[0]?.id;
   sections.forEach((s) => {
     if (y >= s.offsetTop) current = s.id;
   });
@@ -19,11 +41,27 @@ window.addEventListener("scroll", setActive);
 setActive();
 
 // Go dashboard
-document.getElementById("goDashboardBtn").addEventListener("click", () => {
+document.getElementById("goDashboardBtn")?.addEventListener("click", () => {
   window.location.href = "ownerDashboard.html";
 });
 
-// Elements
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try {
+    await fetch("http://localhost:3000/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    localStorage.removeItem("businessName");
+    localStorage.removeItem("role");
+    location.href = "ownerSignUp.html?role=owner&mode=login";
+  }
+});
+
+// ===== Local-only profile data (unchanged behavior) =====
 const form = document.getElementById("profileForm");
 const msg = document.getElementById("statusMsg");
 const displayName = document.getElementById("displayName");
@@ -48,9 +86,8 @@ const galleryGrid = document.getElementById("galleryGrid");
 const clearGalleryBtn = document.getElementById("clearGallery");
 const clearProfileBtn = document.getElementById("clearProfile");
 
-// --------- Local helpers (no DB) ---------
 const LS_PROFILE = "ownerProfile";
-const LS_GALLERY = "ownerGallery"; // array of data URLs
+const LS_GALLERY = "ownerGallery";
 
 function readAsDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -71,7 +108,6 @@ function loadGallery() {
     return [];
   }
 }
-
 function renderGallery() {
   const urls = loadGallery();
   galleryGrid.innerHTML = "";
@@ -84,12 +120,13 @@ function renderGallery() {
   });
 }
 
-// --------- Init from localStorage ---------
+// Hydrate
 (function hydrate() {
   const p = JSON.parse(localStorage.getItem(LS_PROFILE) || "{}");
   if (p.displayName) {
     displayName.value = p.displayName;
-    document.getElementById("businessName").textContent = p.displayName;
+    const chip = document.getElementById("businessName");
+    if (chip) chip.textContent = p.displayName;
   }
   if (p.description) description.value = p.description;
   if (p.cuisine) cuisine.value = p.cuisine;
@@ -106,8 +143,8 @@ function renderGallery() {
   renderGallery();
 })();
 
-// --------- Avatar upload (local preview + save) ---------
-avatarInput.addEventListener("change", async (e) => {
+// Avatar upload
+avatarInput?.addEventListener("change", async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
   const url = await readAsDataURL(f);
@@ -117,9 +154,9 @@ avatarInput.addEventListener("change", async (e) => {
   localStorage.setItem(LS_PROFILE, JSON.stringify(p));
 });
 
-// --------- Multiple image uploads (place+menu) ----------
+// Multi image uploads
 async function handleMulti(files) {
-  if (!files || !files.length) return;
+  if (!files?.length) return;
   const urls = loadGallery();
   for (const f of files) {
     const url = await readAsDataURL(f);
@@ -128,23 +165,22 @@ async function handleMulti(files) {
   saveGallery(urls);
   renderGallery();
 }
-placeImages.addEventListener("change", (e) => handleMulti(e.target.files));
-menuImages.addEventListener("change", (e) => handleMulti(e.target.files));
+placeImages?.addEventListener("change", (e) => handleMulti(e.target.files));
+menuImages?.addEventListener("change", (e) => handleMulti(e.target.files));
 
-// Delete single image
-galleryGrid.addEventListener("click", (e) => {
-  if (!(e.target instanceof Element)) return;
-  if (e.target.classList.contains("del")) {
-    const idx = Number(e.target.getAttribute("data-i"));
-    const urls = loadGallery();
-    urls.splice(idx, 1);
-    saveGallery(urls);
-    renderGallery();
-  }
+// Delete gallery image
+galleryGrid?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".del");
+  if (!btn) return;
+  const idx = Number(btn.getAttribute("data-i"));
+  const urls = loadGallery();
+  urls.splice(idx, 1);
+  saveGallery(urls);
+  renderGallery();
 });
 
-// --------- Save Profile (local only) ----------
-form.addEventListener("submit", (e) => {
+// Save profile (local)
+form?.addEventListener("submit", (e) => {
   e.preventDefault();
   msg.textContent = "Saving…";
   msg.style.color = "#6B7280";
@@ -166,8 +202,8 @@ form.addEventListener("submit", (e) => {
 
   localStorage.setItem(LS_PROFILE, JSON.stringify(profileData));
   if (profileData.displayName) {
-    document.getElementById("businessName").textContent =
-      profileData.displayName;
+    const chip = document.getElementById("businessName");
+    if (chip) chip.textContent = profileData.displayName;
   }
 
   msg.style.color = "green";
@@ -175,7 +211,7 @@ form.addEventListener("submit", (e) => {
   setTimeout(() => (msg.textContent = ""), 2000);
 });
 
-// Clearers
+// Clear helpers
 clearGalleryBtn?.addEventListener("click", () => {
   localStorage.removeItem(LS_GALLERY);
   renderGallery();

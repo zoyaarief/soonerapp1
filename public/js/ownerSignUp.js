@@ -1,8 +1,19 @@
-// Role & mode state
+// public/js/ownerSignUp.js
+
+// ===== API CONFIG =====
+// If your pages run from http://localhost:5173, keep this base and include credentials:
+const API_BASE = "http://localhost:3000";
+const FETCH_CREDENTIALS = "include";
+
+// If your pages are served by Express at :3000, you could use:
+// const API_BASE = window.location.origin;
+// const FETCH_CREDENTIALS = "same-origin";
+
+// ===== STATE =====
 let role = "owner"; // "owner" | "customer"
 let mode = "login"; // "login" | "signup"
 
-// Elements
+// ===== ELEMENTS =====
 const yearEl = document.getElementById("year");
 if (yearEl) yearEl.textContent = new Date().getFullYear();
 
@@ -31,7 +42,7 @@ const osEmail = document.getElementById("osEmail");
 const osPass = document.getElementById("osPass");
 const osMsg = document.getElementById("osMsg");
 
-// Customer fields & messages
+// Customer demo fields
 const clUser = document.getElementById("clUser");
 const clPass = document.getElementById("clPass");
 const clMsg = document.getElementById("clMsg");
@@ -43,70 +54,73 @@ const csUser = document.getElementById("csUser");
 const csPass = document.getElementById("csPass");
 const csMsg = document.getElementById("csMsg");
 
-// Switchers inside forms
-document.getElementById("toOwnerSignup").addEventListener("click", () => {
+// Switchers
+const toOwnerSignup = document.getElementById("toOwnerSignup");
+const toOwnerLogin = document.getElementById("toOwnerLogin");
+const toCustSignup = document.getElementById("toCustSignup");
+const toCustLogin = document.getElementById("toCustLogin");
+
+toOwnerSignup?.addEventListener("click", () => {
   role = "owner";
   mode = "signup";
   render();
 });
-document.getElementById("toOwnerLogin").addEventListener("click", () => {
+toOwnerLogin?.addEventListener("click", () => {
   role = "owner";
   mode = "login";
   render();
 });
-document.getElementById("toCustSignup").addEventListener("click", () => {
+toCustSignup?.addEventListener("click", () => {
   role = "customer";
   mode = "signup";
   render();
 });
-document.getElementById("toCustLogin").addEventListener("click", () => {
+toCustLogin?.addEventListener("click", () => {
   role = "customer";
   mode = "login";
   render();
 });
 
-// Tabs
-tabOwner.addEventListener("click", () => {
+tabOwner?.addEventListener("click", () => {
   role = "owner";
   render();
 });
-tabCustomer.addEventListener("click", () => {
+tabCustomer?.addEventListener("click", () => {
   role = "customer";
   render();
 });
 
-// Helpers
-const show = (el) => el.classList.remove("hidden");
-const hide = (el) => el.classList.add("hidden");
+// ===== HELPERS =====
+const show = (el) => el?.classList.remove("hidden");
+const hide = (el) => el?.classList.add("hidden");
 function setStatus(node, text, ok = false) {
+  if (!node) return;
   node.textContent = text;
-  node.style.color = ok ? "#10b981" : "#eab308"; // green / amber
+  node.style.color = ok ? "#10b981" : "#eab308";
 }
 
-// UI render
 function render() {
-  // tabs
-  tabOwner.classList.toggle("active", role === "owner");
-  tabOwner.setAttribute("aria-selected", role === "owner");
-  tabCustomer.classList.toggle("active", role === "customer");
-  tabCustomer.setAttribute("aria-selected", role === "customer");
+  tabOwner?.classList.toggle("active", role === "owner");
+  tabOwner?.setAttribute("aria-selected", role === "owner");
+  tabCustomer?.classList.toggle("active", role === "customer");
+  tabCustomer?.setAttribute("aria-selected", role === "customer");
 
-  // titles
   if (mode === "login") {
-    formTitle.textContent = "Login";
-    formSubtitle.textContent =
-      role === "owner"
-        ? "Welcome back! Manage your queues."
-        : "Welcome back! Join and track queues.";
+    formTitle && (formTitle.textContent = "Login");
+    formSubtitle &&
+      (formSubtitle.textContent =
+        role === "owner"
+          ? "Welcome back! Manage your queues."
+          : "Welcome back! Join and track queues.");
   } else {
-    formTitle.textContent = "Create account";
-    formSubtitle.textContent =
-      role === "owner"
-        ? "Let’s get your business on Sooner."
-        : "A few details to start skipping waits.";
+    formTitle && (formTitle.textContent = "Create account");
+    formSubtitle &&
+      (formSubtitle.textContent =
+        role === "owner"
+          ? "Let’s get your business on Sooner."
+          : "A few details to start skipping waits.");
   }
 
-  // show correct form
   hide(ownerLogin);
   hide(ownerSignup);
   hide(custLogin);
@@ -116,74 +130,100 @@ function render() {
   if (role === "customer" && mode === "login") show(custLogin);
   if (role === "customer" && mode === "signup") show(custSignup);
 }
-render();
 
 // Allow deep link: ?role=customer&mode=signup&returnTo=/place.html?id=123
 const usp = new URLSearchParams(location.search);
 if (usp.get("role")) role = usp.get("role");
 if (usp.get("mode")) mode = usp.get("mode");
+const returnTo = usp.get("returnTo");
 render();
 
-// Extract optional return target
-const returnTo = usp.get("returnTo");
-
-/* ====== SUBMIT HANDLERS (DEMO ONLY) ====== */
-
-// Owner login
-ownerLogin.addEventListener("submit", (e) => {
+// ===== OWNER: LOGIN (real API) =====
+ownerLogin?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(olMsg, "Checking…");
-  setTimeout(() => {
-    if (!olEmail.value.trim() || olPass.value.length < 8) {
+  try {
+    const email = (olEmail?.value || "").trim();
+    const password = olPass?.value || "";
+    if (!email || password.length < 8) {
       setStatus(olMsg, "Invalid email or password.");
       return;
     }
-    localStorage.setItem("role", "owner");
-    if (!localStorage.getItem("businessName")) {
-      const derived = olEmail.value.split("@")[0] || "Business Name";
-      localStorage.setItem("businessName", derived);
-    }
-    setStatus(olMsg, "Logged in. Redirecting…", true);
-    setTimeout(() => (location.href = "ownerProfile.html"), 600);
-  }, 600);
-});
-
-// Owner signup
-ownerSignup.addEventListener("submit", (e) => {
-  e.preventDefault();
-  setStatus(osMsg, "Saving…");
-  const ok =
-    osManager.value.trim() &&
-    osBusiness.value.trim() &&
-    osType.value.trim() &&
-    osPhone.value.trim() &&
-    osEmail.value.trim() &&
-    osPass.value.length >= 8;
-
-  setTimeout(() => {
-    if (!ok) {
-      setStatus(osMsg, "Fill all fields (min 8-char password).");
+    const res = await fetch(`${API_BASE}/api/owners/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: FETCH_CREDENTIALS,
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setStatus(olMsg, data?.error || "Login failed.");
       return;
     }
     localStorage.setItem("role", "owner");
-    localStorage.setItem("businessName", osBusiness.value.trim());
     localStorage.setItem(
-      "ownerSignup",
-      JSON.stringify({
-        manager: osManager.value.trim(),
-        business: osBusiness.value.trim(),
-        type: osType.value.trim(),
-        phone: osPhone.value.trim(),
-        email: osEmail.value.trim(),
-      })
+      "businessName",
+      data.business || email.split("@")[0] || "Business"
     );
-    setStatus(osMsg, "Account created. Redirecting…", true);
-    setTimeout(() => (location.href = "ownerProfile.html"), 700);
-  }, 700);
+    setStatus(olMsg, "Logged in. Redirecting…", true);
+
+    setTimeout(() => window.location.assign("/ownerProfile.html"), 300);
+  } catch (err) {
+    console.error(err);
+    setStatus(olMsg, "Network error.");
+  }
 });
 
-// Customer login
-custLogin.addEventListener("submit", (e) => {
+// ===== OWNER: SIGNUP (real API) =====
+ownerSignup?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setStatus(osMsg, "Saving…");
+  try {
+    const payload = {
+      manager: (osManager?.value || "").trim(),
+      business: (osBusiness?.value || "").trim(),
+      type: (osType?.value || "").trim(),
+      phone: (osPhone?.value || "").trim(),
+      email: (osEmail?.value || "").trim(),
+      password: osPass?.value || "",
+    };
+    const valid =
+      payload.manager &&
+      payload.business &&
+      payload.type &&
+      payload.phone &&
+      payload.email &&
+      payload.password.length >= 8;
+    if (!valid) {
+      setStatus(osMsg, "Fill all fields (min 8-char password).");
+      return;
+    }
+
+    const res = await fetch(`${API_BASE}/api/owners`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: FETCH_CREDENTIALS,
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setStatus(osMsg, data?.error || "Failed to create account.");
+      return;
+    }
+
+    localStorage.setItem("role", "owner");
+    localStorage.setItem("businessName", payload.business);
+    setStatus(osMsg, "Account created. Redirecting…", true);
+
+    setTimeout(() => window.location.assign("/ownerProfile.html"), 300);
+  } catch (err) {
+    console.error(err);
+    setStatus(osMsg, "Network error.");
+  }
+});
+
+// ===== CUSTOMER (demo-only; keeps returnTo logic) =====
+custLogin?.addEventListener("submit", (e) => {
   e.preventDefault();
   setStatus(clMsg, "Checking…");
   setTimeout(() => {
@@ -192,27 +232,20 @@ custLogin.addEventListener("submit", (e) => {
       return;
     }
     localStorage.setItem("role", "customer");
-    if (!localStorage.getItem("customerName")) {
-      const base = clUser.value.includes("@")
-        ? clUser.value.split("@")[0]
-        : clUser.value.replace(/^@/, "");
-      localStorage.setItem("customerName", base || "Customer");
-    }
+    const base = clUser.value.includes("@")
+      ? clUser.value.split("@")[0]
+      : clUser.value.replace(/^@/, "");
+    localStorage.setItem("customerName", base || "Customer");
     setStatus(clMsg, "Logged in. Redirecting…", true);
 
-    // ✅ redirect logic with returnTo param
     setTimeout(() => {
-      if (returnTo) {
-        location.href = decodeURIComponent(returnTo);
-      } else {
-        location.href = "userDashboard.html";
-      }
-    }, 600);
-  }, 600);
+      if (returnTo) location.href = decodeURIComponent(returnTo);
+      else location.href = "/flashscreen.html";
+    }, 300);
+  }, 300);
 });
 
-// Customer signup
-custSignup.addEventListener("submit", (e) => {
+custSignup?.addEventListener("submit", (e) => {
   e.preventDefault();
   setStatus(csMsg, "Saving…");
   const ok =
@@ -240,13 +273,9 @@ custSignup.addEventListener("submit", (e) => {
     );
     setStatus(csMsg, "Account created. Redirecting…", true);
 
-    // ✅ redirect logic with returnTo param
     setTimeout(() => {
-      if (returnTo) {
-        location.href = decodeURIComponent(returnTo);
-      } else {
-        location.href = "userDashboard.html";
-      }
-    }, 700);
-  }, 700);
+      if (returnTo) location.href = decodeURIComponent(returnTo);
+      else location.href = "/flashscreen.html";
+    }, 300);
+  }, 300);
 });
