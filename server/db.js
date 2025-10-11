@@ -32,6 +32,11 @@ export function getDb() {
   return db;
 }
 
+/** Expose the client (needed for transactions) */
+export function getClient() {
+  return client;
+}
+
 /** Optional graceful shutdown */
 export async function closeDb() {
   await client.close();
