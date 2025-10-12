@@ -69,16 +69,36 @@
         <!-- Metric pills -->
         <section class="pills">
           <div class="pill">
-            <div class="pill__title">Walk-ins</div>
-            <div class="pill__spark" id="mWalkins">Disabled</div>
+            <div>
+              <div class="pill__title">Walk-ins</div>
+              <div class="pill__spark" id="mWalkins">Disabled</div>
+            </div>
+            <div>
+              <button id="walkinBtn" class="btn">Enable Walk-ins</button>
+            </div>
           </div>
           <div class="pill">
-            <div class="pill__title">Open Status</div>
-            <div class="pill__spark" id="mOpen">Closed</div>
+            <div>
+              <div class="pill__title">Open Status</div>
+              <div class="pill__spark" id="mOpen">Closed</div>
+            </div>
+            <div>
+              <button id="openCloseBtn" class="btn btn--ghost">Open</button>
+            </div>
           </div>
           <div class="pill">
-            <div class="pill__title">In Queue</div>
-            <div class="pill__spark" id="mQueueCount">0</div>
+            <div>
+              <div class="pill__title">In Queue</div>
+              <div class="pill__spark" id="mQueueCount">0</div>
+            </div>
+            <div>
+              <button id="stopQueueBtn" class="btn btn--danger">
+                Stop Queue
+              </button>
+              <button id="restartQueueBtn" class="btn btn--ghost hidden">
+                Restart Queue
+              </button>
+            </div>
           </div>
           <div class="pill">
             <div class="pill__title">Avg Wait</div>
@@ -88,35 +108,6 @@
 
         <!-- Grid -->
         <section class="grid">
-          <!-- Controls (still on page, just not in nav) -->
-          <section id="controlsCard" class="card">
-            <div class="card__head">
-              <h2>Controls</h2>
-            </div>
-            <div class="controls">
-              <button id="walkinBtn" class="btn">Enable Walk-ins</button>
-              <button id="openCloseBtn" class="btn btn--ghost">Open</button>
-              <button id="stopQueueBtn" class="btn btn--danger">
-                Stop Queue
-              </button>
-              <button id="restartQueueBtn" class="btn btn--ghost hidden">
-                Restart Queue
-              </button>
-            </div>
-          </section>
-
-          <!-- Right hero promo -->
-          <section class="card hero">
-            <img src="./images/restaurant.jpg" alt="promo" />
-            <div class="hero__body">
-              <h3>Promote your best hour</h3>
-              <p>
-                Schedule “happy wait” slots and reduce peak-time congestion.
-              </p>
-              <button class="btn btn--ghost">Create Slot</button>
-            </div>
-          </section>
-
           <!-- Announcements -->
           <section id="announceCard" class="card span-2">
             <div class="card__head">
@@ -139,6 +130,11 @@
               <small class="tiny"
                 >Check to mark served (undo within 5 mins)</small
               >
+              <div
+                id="spotsLeft"
+                class="meta"
+                style="color: #6b7280; margin-bottom: 8px"
+              ></div>
             </div>
             <div id="queueList" class="queue-list"></div>
             <div class="btn-row">

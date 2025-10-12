@@ -1,30 +1,28 @@
 // public/js/ownerProfile.js
 
-// Guard: must be logged-in owner (cross-origin: include credentials)
+const API_BASE = "http://localhost:3000";
+const FETCH_CREDENTIALS = "include";
+
+// Auth guard
 (async function guard() {
   try {
-    const res = await fetch("http://localhost:3000/api/session", {
+    const res = await fetch(`${API_BASE}/api/session`, {
       method: "GET",
-      credentials: "include",
+      credentials: FETCH_CREDENTIALS,
     });
     if (!res.ok) {
       location.href = "ownerSignUp.html?role=owner&mode=login";
       return;
     }
     const data = await res.json();
-    localStorage.setItem("businessName", data.business || "Business");
-    const b1 = document.getElementById("businessName");
-    if (b1) b1.textContent = data.business || "Business Name";
+    const chip = document.getElementById("businessName");
+    if (chip) chip.textContent = data.business || "Business Name";
   } catch {
     location.href = "ownerSignUp.html?role=owner&mode=login";
   }
 })();
 
-// Session name → top chips
-const businessName = localStorage.getItem("businessName") || "Business Name";
-document.getElementById("businessName").textContent = businessName;
-
-// Quick nav active state on scroll (profile sections)
+// Nav highlight
 const links = document.querySelectorAll(".navlink");
 const sections = [...document.querySelectorAll("section.card")];
 const setActive = () => {
@@ -40,28 +38,22 @@ const setActive = () => {
 window.addEventListener("scroll", setActive);
 setActive();
 
-// Go dashboard
+// Buttons
 document.getElementById("goDashboardBtn")?.addEventListener("click", () => {
   window.location.href = "ownerDashboard.html";
 });
-
-// Logout
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   try {
-    await fetch("http://localhost:3000/api/logout", {
+    await fetch(`${API_BASE}/api/logout`, {
       method: "POST",
-      credentials: "include",
+      credentials: FETCH_CREDENTIALS,
     });
-  } catch (e) {
-    console.error(e);
   } finally {
-    localStorage.removeItem("businessName");
-    localStorage.removeItem("role");
     location.href = "ownerSignUp.html?role=owner&mode=login";
   }
 });
 
-// ===== Local-only profile data (unchanged behavior) =====
+// Form fields
 const form = document.getElementById("profileForm");
 const msg = document.getElementById("statusMsg");
 const displayName = document.getElementById("displayName");
@@ -78,6 +70,7 @@ const closeTime = document.getElementById("closeTime");
 
 const avatarInput = document.getElementById("avatarInput");
 const avatarPreview = document.getElementById("avatarPreview");
+const chipImg = document.querySelector(".userchip img");
 
 const placeImages = document.getElementById("placeImages");
 const menuImages = document.getElementById("menuImages");
@@ -86,9 +79,10 @@ const galleryGrid = document.getElementById("galleryGrid");
 const clearGalleryBtn = document.getElementById("clearGallery");
 const clearProfileBtn = document.getElementById("clearProfile");
 
-const LS_PROFILE = "ownerProfile";
-const LS_GALLERY = "ownerGallery";
+// In-memory gallery for this page session
+let galleryState = [];
 
+// Helpers
 function readAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -97,21 +91,9 @@ function readAsDataURL(file) {
     fr.readAsDataURL(file);
   });
 }
-
-function saveGallery(urls) {
-  localStorage.setItem(LS_GALLERY, JSON.stringify(urls));
-}
-function loadGallery() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_GALLERY) || "[]");
-  } catch {
-    return [];
-  }
-}
 function renderGallery() {
-  const urls = loadGallery();
   galleryGrid.innerHTML = "";
-  urls.forEach((src, i) => {
+  galleryState.forEach((src, i) => {
     const tile = document.createElement("div");
     tile.className = "tile";
     tile.innerHTML = `<img src="${src}" alt="upload ${i}" />
@@ -120,103 +102,126 @@ function renderGallery() {
   });
 }
 
-// Hydrate
-(function hydrate() {
-  const p = JSON.parse(localStorage.getItem(LS_PROFILE) || "{}");
-  if (p.displayName) {
-    displayName.value = p.displayName;
-    const chip = document.getElementById("businessName");
-    if (chip) chip.textContent = p.displayName;
-  }
-  if (p.description) description.value = p.description;
-  if (p.cuisine) cuisine.value = p.cuisine;
-  if (p.approxPrice) approxPrice.value = p.approxPrice;
-  if (p.waitTime) waitTime.value = p.waitTime;
-  if (p.totalSeats) totalSeats.value = p.totalSeats;
-  if (p.maxBooking) maxBooking.value = p.maxBooking;
-  if (p.location) locationInput.value = p.location;
-  if (p.features) features.value = p.features;
-  if (p.openTime) openTime.value = p.openTime;
-  if (p.closeTime) closeTime.value = p.closeTime;
-  if (p.avatar) avatarPreview.src = p.avatar;
+// Hydrate from server
+(async function hydrateFromServer() {
+  try {
+    const res = await fetch(`${API_BASE}/api/owners/me`, {
+      method: "GET",
+      credentials: FETCH_CREDENTIALS,
+    });
+    if (!res.ok) throw new Error("not ok");
+    const data = await res.json();
 
-  renderGallery();
+    const p = data.profile || {};
+    displayName.value = p.displayName || data.business || "";
+    description.value = p.description || "";
+    cuisine.value = p.cuisine || "";
+    approxPrice.value = p.approxPrice || "";
+    waitTime.value = p.waitTime ?? "";
+    totalSeats.value = p.totalSeats ?? "";
+    maxBooking.value = p.maxBooking ?? "";
+    locationInput.value = p.location || "";
+    openTime.value = p.openTime || "";
+    closeTime.value = p.closeTime || "";
+    features.value = p.features || "";
+
+    const avatarSrc = p.avatar || "./images/default_profile.png";
+    avatarPreview.src = avatarSrc;
+    if (chipImg) chipImg.src = avatarSrc;
+
+    galleryState = Array.isArray(p.gallery) ? p.gallery.slice() : [];
+    renderGallery();
+
+    const chipName = document.getElementById("businessName");
+    if (p.displayName && chipName) chipName.textContent = p.displayName;
+  } catch (e) {
+    console.warn("hydrateFromServer error:", e);
+  }
 })();
 
-// Avatar upload
+// Avatar upload (preview only; saved on Submit)
 avatarInput?.addEventListener("change", async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
   const url = await readAsDataURL(f);
   avatarPreview.src = url;
-  const p = JSON.parse(localStorage.getItem(LS_PROFILE) || "{}");
-  p.avatar = url;
-  localStorage.setItem(LS_PROFILE, JSON.stringify(p));
+  if (chipImg) chipImg.src = url;
 });
 
-// Multi image uploads
+// Multiple images → galleryState
 async function handleMulti(files) {
   if (!files?.length) return;
-  const urls = loadGallery();
   for (const f of files) {
     const url = await readAsDataURL(f);
-    urls.push(url);
+    galleryState.push(url);
   }
-  saveGallery(urls);
   renderGallery();
 }
 placeImages?.addEventListener("change", (e) => handleMulti(e.target.files));
 menuImages?.addEventListener("change", (e) => handleMulti(e.target.files));
 
-// Delete gallery image
 galleryGrid?.addEventListener("click", (e) => {
   const btn = e.target.closest(".del");
   if (!btn) return;
   const idx = Number(btn.getAttribute("data-i"));
-  const urls = loadGallery();
-  urls.splice(idx, 1);
-  saveGallery(urls);
+  galleryState.splice(idx, 1);
   renderGallery();
 });
 
-// Save profile (local)
-form?.addEventListener("submit", (e) => {
+// Save → PUT to server
+form?.addEventListener("submit", async (e) => {
   e.preventDefault();
   msg.textContent = "Saving…";
   msg.style.color = "#6B7280";
 
-  const profileData = {
+  const payload = {
     displayName: displayName.value.trim(),
     description: description.value.trim(),
     cuisine: cuisine.value.trim(),
     approxPrice: approxPrice.value.trim(),
-    waitTime: waitTime.value,
-    totalSeats: totalSeats.value,
-    maxBooking: maxBooking.value,
+    waitTime: Number(waitTime.value || 0),
+    totalSeats: Number(totalSeats.value || 0),
+    maxBooking: Number(maxBooking.value || 0),
     location: locationInput.value.trim(),
     openTime: openTime.value.trim(),
     closeTime: closeTime.value.trim(),
     features: features.value.trim(),
-    avatar: avatarPreview.src,
+    avatar: avatarPreview.src, // data URL
+    gallery: galleryState, // array of data URLs
   };
 
-  localStorage.setItem(LS_PROFILE, JSON.stringify(profileData));
-  if (profileData.displayName) {
-    const chip = document.getElementById("businessName");
-    if (chip) chip.textContent = profileData.displayName;
+  try {
+    const res = await fetch(`${API_BASE}/api/owners/me`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: FETCH_CREDENTIALS,
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      msg.style.color = "crimson";
+      msg.textContent = data?.error || "Save failed.";
+      return;
+    }
+    if (payload.displayName) {
+      const chipName = document.getElementById("businessName");
+      if (chipName) chipName.textContent = payload.displayName;
+    }
+    msg.style.color = "green";
+    msg.textContent = "Saved to database!";
+    setTimeout(() => (msg.textContent = ""), 2000);
+  } catch (err) {
+    console.error(err);
+    msg.style.color = "crimson";
+    msg.textContent = "Network error.";
   }
-
-  msg.style.color = "green";
-  msg.textContent = "Profile saved locally!";
-  setTimeout(() => (msg.textContent = ""), 2000);
 });
 
-// Clear helpers
+// Clear helpers (local preview only)
 clearGalleryBtn?.addEventListener("click", () => {
-  localStorage.removeItem(LS_GALLERY);
+  galleryState = [];
   renderGallery();
 });
 clearProfileBtn?.addEventListener("click", () => {
-  localStorage.removeItem(LS_PROFILE);
-  location.reload();
+  window.location.reload();
 });
