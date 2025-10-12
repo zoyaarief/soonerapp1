@@ -222,60 +222,92 @@ ownerSignup?.addEventListener("submit", async (e) => {
   }
 });
 
-// ===== CUSTOMER (demo-only; keeps returnTo logic) =====
-custLogin?.addEventListener("submit", (e) => {
+// ===== CUSTOMER (real API) =====
+custLogin?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(clMsg, "Checking…");
-  setTimeout(() => {
-    if (!clUser.value.trim() || clPass.value.length < 8) {
-      setStatus(clMsg, "Invalid credentials.");
+  try {
+    const email = (clUser?.value || "").trim();
+    const password = clPass?.value || "";
+    if (!email || password.length < 6) {
+      setStatus(clMsg, "Invalid email or password.");
       return;
     }
+
+    const res = await fetch(`${API_BASE}/api/customers/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: FETCH_CREDENTIALS,
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setStatus(clMsg, data?.error || "Login failed.");
+      return;
+    }
+
     localStorage.setItem("role", "customer");
-    const base = clUser.value.includes("@")
-      ? clUser.value.split("@")[0]
-      : clUser.value.replace(/^@/, "");
-    localStorage.setItem("customerName", base || "Customer");
+    localStorage.setItem("customerName", data.user?.name || email.split("@")[0] || "Customer");
     setStatus(clMsg, "Logged in. Redirecting…", true);
 
     setTimeout(() => {
-      if (returnTo) location.href = decodeURIComponent(returnTo);
-      else location.href = "/flashscreen.html";
-    }, 300);
-  }, 300);
+      if (returnTo) {
+        location.href = decodeURIComponent(returnTo);
+      } else {
+        location.href = "/userDashboard.html";
+      }
+    }, 400);
+  } catch (err) {
+    console.error(err);
+    setStatus(clMsg, "Network error.");
+  }
 });
 
-custSignup?.addEventListener("submit", (e) => {
+custSignup?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setStatus(csMsg, "Saving…");
-  const ok =
-    csName.value.trim() &&
-    csPhone.value.trim() &&
-    csEmail.value.trim() &&
-    csUser.value.trim() &&
-    csPass.value.length >= 8;
+  try {
+    const payload = {
+      name: (csName?.value || "").trim(),
+      email: (csEmail?.value || "").trim(),
+      phone: (csPhone?.value || "").trim(),
+      password: csPass?.value || "",
+    };
+    const ok =
+      payload.name && payload.email && payload.password.length >= 6;
 
-  setTimeout(() => {
     if (!ok) {
-      setStatus(csMsg, "Please complete all fields (min 8-char password).");
+      setStatus(csMsg, "Please complete all fields (min 6-char password).");
       return;
     }
+
+    const res = await fetch(`${API_BASE}/api/customers/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: FETCH_CREDENTIALS,
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      setStatus(csMsg, data?.error || "Signup failed.");
+      return;
+    }
+
     localStorage.setItem("role", "customer");
-    localStorage.setItem("customerName", csName.value.trim());
-    localStorage.setItem(
-      "customerSignup",
-      JSON.stringify({
-        name: csName.value.trim(),
-        phone: csPhone.value.trim(),
-        email: csEmail.value.trim(),
-        username: csUser.value.trim(),
-      })
-    );
+    localStorage.setItem("customerName", payload.name);
     setStatus(csMsg, "Account created. Redirecting…", true);
 
     setTimeout(() => {
-      if (returnTo) location.href = decodeURIComponent(returnTo);
-      else location.href = "/flashscreen.html";
-    }, 300);
-  }, 300);
+      if (returnTo) {
+        location.href = decodeURIComponent(returnTo);
+      } else {
+        location.href = "/userDashboard.html";
+      }
+    }, 400);
+  } catch (err) {
+    console.error(err);
+    setStatus(csMsg, "Network error.");
+  }
 });

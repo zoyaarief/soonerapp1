@@ -73,8 +73,8 @@ cards.forEach((card) => {
     }
 
     // Redirect to Browse page if type is provided
-    if (type) {
+    /*if (type) {
       window.location.href = `browse.html?type=${encodeURIComponent(type)}`;
-    }
+    }*/
   });
 });

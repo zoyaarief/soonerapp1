@@ -1,106 +1,144 @@
-const links = document.querySelectorAll(".navlink");
-const sections = [...document.querySelectorAll("section.card")];
-function setActive() {
-  const y = window.scrollY + 120;
-  let current = sections[0].id;
-  sections.forEach((s)=>{ if (y >= s.offsetTop) current = s.id; });
-  links.forEach((a)=>a.classList.toggle("active", a.getAttribute("href")==="#"+current));
+async function fetchJSON(url, opts={}) {
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
 }
-window.addEventListener("scroll", setActive); setActive();
 
-const chipName = document.getElementById("chipName");
-chipName.textContent = localStorage.getItem("customerName") || "Customer";
+const toastEl = document.getElementById("toast");
+const toastText = document.getElementById("toastText");
+function toast(msg) {
+  toastText.textContent = msg;
+  toastEl.classList.add("show");
+  setTimeout(() => toastEl.classList.remove("show"), 2000);
+}
 
-// Avatar upload (local only)
-const avatarInput = document.getElementById("avatarInput");
-avatarInput?.addEventListener("change", async (e) => {
-  const f = e.target.files?.[0]; if (!f) return;
-  const fr = new FileReader();
-  fr.onload = () => {
-    document.getElementById("avatar").src = fr.result;
-    localStorage.setItem("customerAvatar", fr.result);
-  };
-  fr.readAsDataURL(f);
-});
-const savedAvatar = localStorage.getItem("customerAvatar");
-if (savedAvatar) document.getElementById("avatar").src = savedAvatar;
+async function loadProfile() {
+  try {
+    const user = await fetchJSON("/api/customers/me");
+    document.getElementById("userName").textContent = user.name || "—";
+    document.getElementById("userEmail").textContent = user.email || "—";
+    document.getElementById("userPhone").textContent = user.phone || "—";
+    if (user.avatar) document.getElementById("avatar").src = user.avatar;
+  } catch {
+    toast("Not logged in");
+    location.href = "ownerSignUp.html?role=customer&mode=login";
+  }
+}
 
-// Stats + lists
-function getFavs(){ try{return JSON.parse(localStorage.getItem("favorites")||"[]");}catch{return[];}}
-function getHist(){ try{return JSON.parse(localStorage.getItem("history")||"[]");}catch{return[];}}
-function getActive(){ try{return JSON.parse(localStorage.getItem("activeQueue")||"null");}catch{return null;}}
+async function loadFavorites() {
+  try {
+    const favs = await fetchJSON("/api/likes");
+    const wrap = document.getElementById("favorites");
+    wrap.innerHTML = "";
+    if (!favs.length) { wrap.textContent = "No favorites yet."; return; }
 
-function render() {
-  const favs = getFavs(); const hist = getHist(); const active = getActive();
-  document.getElementById("statFavs").textContent = String(favs.length);
-  document.getElementById("statHistory").textContent = String(hist.length);
-  document.getElementById("statActive").textContent = active ? `${active.placeName} • #${active.position}` : "None";
+    favs.forEach(f => {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <img src="${f.heroImage || './images/restaurant.jpg'}" alt="">
+        <h3>${f.name}</h3>
+      `;
+      div.addEventListener("click", () => location.href = `place.html?id=${f.venueId}`);
+      wrap.appendChild(div);
+    });
+  } catch {
+    document.getElementById("favorites").textContent = "Failed to load favorites.";
+  }
+}
 
-  const favList = document.getElementById("favList");
-  favList.innerHTML = "";
-  if (!favs.length) favList.innerHTML = `<li class="muted">No favorites yet.</li>`;
-  favs.forEach(f => {
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${f.name} • ⭐ ${f.rating ?? "—"}</span>
-                    <span>
-                      <a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(f.id)}">Open</a>
-                      <button data-rm="${f.id}" class="btn small">Remove</button>
-                    </span>`;
-    favList.appendChild(li);
-  });
-  favList.addEventListener("click", (e)=>{
-    const rm = e.target.closest("[data-rm]"); if(!rm) return;
-    const id = rm.getAttribute("data-rm");
-    const arr = getFavs(); const i = arr.findIndex(x=>x.id===id);
-    if (i>-1) arr.splice(i,1);
-    localStorage.setItem("favorites", JSON.stringify(arr));
-    render();
-  }, { once: true });
+async function loadHistory() {
+  try {
+    const hist = await fetchJSON("/api/history");
 
-  const hList = document.getElementById("historyList");
-  hList.innerHTML = "";
-  if (!hist.length) hList.innerHTML = `<li class="muted">No visits yet.</li>`;
-  hist.forEach(h => {
-    const dt = new Date(h.at).toLocaleString();
-    const li = document.createElement("li");
-    li.innerHTML = `<span>${h.name} • ${dt}</span>
-                    <span>
-                      <a class="btn btn--ghost small" href="place.html?id=${encodeURIComponent(h.id)}">Revisit</a>
-                      <button class="btn small" data-fav="${h.id}">Fav</button>
-                    </span>`;
-    hList.appendChild(li);
-  });
-  hList.addEventListener("click", (e) => {
-    const fav = e.target.closest("[data-fav]"); if (!fav) return;
-    const id = fav.getAttribute("data-fav");
-    const favs = JSON.parse(localStorage.getItem("favorites")||"[]");
-    if (!favs.some(f=>f.id===id)) {
-      const place = (JSON.parse(localStorage.getItem("places")||"[]")).find(p=>p.id===id);
-      favs.push({id, name: place?.name || "Place", rating: place?.rating || 0});
-      localStorage.setItem("favorites", JSON.stringify(favs));
-      render();
+    // prefer the UL list if present; fallback to the section
+    const listEl = document.getElementById("historyList") || document.getElementById("history");
+    if (!listEl) return;
+
+    listEl.innerHTML = "";
+
+    if (!hist || !hist.length) {
+      listEl.innerHTML = "<p class='muted'>No past visits yet.</p>";
+      return;
     }
-  }, { once: true });
 
-render();
+    // Render each served venue as a list item with a 'View' button
+    hist.forEach(h => {
+      const li = document.createElement("li");
+      li.className = "list-item"; // optional; your CSS already styles .list > li
+      const date = new Date(h.date).toLocaleDateString();
 
-// Account form
-const acctForm = document.getElementById("acctForm");
-const status = document.getElementById("status");
-(function hydrate(){
-  const profile = JSON.parse(localStorage.getItem("customerProfile")||"{}");
-  document.getElementById("name").value = profile.name || (localStorage.getItem("customerName")||"");
-  document.getElementById("phone").value = profile.phone || "";
-  document.getElementById("email").value = profile.email || "";
-})();
-acctForm.addEventListener("submit", (e)=>{
-  e.preventDefault();
-  const profile = {
-    name: document.getElementById("name").value.trim(),
-    phone: document.getElementById("phone").value.trim(),
-    email: document.getElementById("email").value.trim(),
+      li.innerHTML = `
+        <div>
+          <strong>${h.name}</strong><br>
+          <span class="muted">Served on ${date}</span>
+        </div>
+        <button class="btn small" data-id="${h.venueId}">View</button>
+      `;
+
+      listEl.appendChild(li);
+    });
+
+    // Attach the click handler once (event delegation)
+    if (!listEl._historyBound) {
+      listEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-id]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-id");
+        location.href = `place.html?id=${encodeURIComponent(id)}`;
+      });
+      listEl._historyBound = true;
+    }
+  } catch (err) {
+    console.error(err);
+    const wrap = document.getElementById("history") || document.getElementById("historyList");
+    if (wrap) wrap.innerHTML = "<p class='muted'>Failed to load history.</p>";
+  }
+}
+
+async function loadActiveQueue() {
+  try {
+    const q = await fetchJSON("/api/queue/active");
+    const wrap = document.getElementById("activeQueue");
+    if (!q || !q.venueName) {
+      wrap.textContent = "No active queue.";
+      return;
+    }
+    wrap.innerHTML = `
+      <p>You’re currently in line at <b>${q.venueName}</b></p>
+      <p>Position: #${q.position || "?"}</p>
+    `;
+  } catch {
+    document.getElementById("activeQueue").textContent = "No active queue.";
+  }
+}
+
+// handle avatar upload
+document.getElementById("avatarUpload")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result;
+    try {
+      await fetch("/api/customers/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ avatar: base64 })
+      });
+      document.getElementById("avatar").src = base64;
+      toast("Profile picture updated!");
+    } catch {
+      toast("Upload failed");
+    }
   };
-  localStorage.setItem("customerProfile", JSON.stringify(profile));
-  if (profile.name) { localStorage.setItem("customerName", profile.name); chipName.textContent = profile.name; }
-  status.style.color = "green"; status.textContent = "Saved"; setTimeout(()=>status.textContent="", 1500);
+  reader.readAsDataURL(file);
 });
+
+(async function init() {
+  await loadProfile();
+  await loadFavorites();
+  await loadHistory();
+  await loadActiveQueue();
+})();

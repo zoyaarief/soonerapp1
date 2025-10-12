@@ -1,106 +1,184 @@
+
+// browse.js — LIVE filters, toasts, hearts, distance sort (nearby)
+
+// ============== Helpers ==============
+function qs(sel){ return document.querySelector(sel); }
+function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+// Toast
 const toastEl = document.getElementById("toast");
 const toastText = document.getElementById("toastText");
 document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
-function toast(t){ if(!toastEl||!toastText) return; toastText.textContent = t; toastEl.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("show"), 2400); }
-
-// Seed demo places if not present
-function seed() {
-  if (localStorage.getItem("places")) return;
-  const places = [
-    { id: "r_olive", category: "restaurants", name: "Olive & Thyme", location: "Boston", price: 2, rating: 4.6, cuisine: "Mediterranean", queue: 7, waitPerGroup: 8, image: "./images/restaurant2.jpg" },
-    { id: "r_sushi", category: "restaurants", name: "Sora Sushi", location: "Cambridge", price: 3, rating: 4.7, cuisine: "Japanese", queue: 3, waitPerGroup: 10, image: "./images/restaurant.jpg" },
-    { id: "s_blush", category: "salons", name: "Blush & Blow", location: "Cambridge", price: 2, rating: 4.4, cuisine: "Salon", queue: 2, waitPerGroup: 12, image: "./images/salon2.jpg" },
-    { id: "c_river", category: "clinics", name: "Riverwalk Clinic", location: "Boston", price: 2, rating: 4.3, cuisine: "General", queue: 9, waitPerGroup: 6, image: "./images/clinic2.jpg" },
-    { id: "e_arcade", category: "events", name: "Arcade Nights", location: "Somerville", price: 1, rating: 4.1, cuisine: "Event", queue: 12, waitPerGroup: 5, image: "./images/party2.jpg" },
-    { id: "g_ups", category: "services", name: "UPS Center - Central Sq", location: "Cambridge", price: 1, rating: 4.0, cuisine: "Shipping", queue: 5, waitPerGroup: 4, image: "./images/clinic.jpg" }
-  ];
-  localStorage.setItem("places", JSON.stringify(places));
-}
-seed();
-
-// Read params
-const usp = new URLSearchParams(location.search);
-const type = usp.get("type");
-const nearby = usp.get("nearby")==="1";
-const qIn = document.getElementById("q");
-const title = document.getElementById("title");
-if (type) title.textContent = type[0].toUpperCase()+type.slice(1);
-
-// Filters
-const locSel = document.getElementById("loc");
-const priceSel = document.getElementById("price");
-const ratingSel = document.getElementById("rating");
-const cuisineIn = document.getElementById("cuisine");
-document.getElementById("apply").addEventListener("click", render);
-document.getElementById("clear").addEventListener("click", () => {
-  qIn.value = ""; locSel.value=""; priceSel.value=""; ratingSel.value=""; cuisineIn.value=""; render();
-});
-qIn.addEventListener("keydown", (e) => { if(e.key==="Enter") render(); });
-
-function getAll() { try { return JSON.parse(localStorage.getItem("places")||"[]"); } catch { return []; }}
-
-function distanceScore(p) {
-  const loc = JSON.parse(localStorage.getItem("userLocation")||"null");
-  if (!loc) return Math.random(); // fallback
-  // fake: random score as we don't have coords per place
-  return Math.random();
+function toast(msg){
+  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+  toastText.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
 }
 
-function render() {
-  const grid = document.getElementById("grid");
-  const q = qIn.value.trim().toLowerCase();
-  const loc = locSel.value;
-  const price = Number(priceSel.value || 0);
-  const rating = Number(ratingSel.value || 0);
-  const cuisine = cuisineIn.value.trim().toLowerCase();
+async function fetchJSON(url, opts={}){
+  const r = await fetch(url, { credentials:"include", ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 
-  let items = getAll().filter(p => (!type || p.category===type));
-  if (q) items = items.filter(p => p.name.toLowerCase().includes(q) || p.cuisine.toLowerCase().includes(q));
-  if (loc) items = items.filter(p => p.location===loc);
-  if (price) items = items.filter(p => p.price===price);
-  if (rating) items = items.filter(p => p.rating >= rating);
-  if (cuisine) items = items.filter(p => p.cuisine.toLowerCase().includes(cuisine));
+// Normalize plural/singular
+function normalizeType(t){
+  const map = { restaurants:"restaurant", restaurant:"restaurant",
+                salons:"salon", salon:"salon",
+                clinics:"clinic", clinic:"clinic",
+                events:"event", event:"event",
+                services:"other", other:"other" };
+  return map[(t||"").toLowerCase()] || t;
+}
 
-  if (nearby) items.sort((a,b)=>distanceScore(a)-distanceScore(b));
-  else items.sort((a,b)=>b.rating-a.rating);
-
-  grid.innerHTML = "";
-  if (!items.length) {
-    grid.innerHTML = `<p class="muted">No results. Try clearing filters.</p>`;
-    return;
-  }
-  items.forEach(p => {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `
-      <img src="${p.image || "./images/restaurant2.jpg"}" alt="${p.name}" />
-      <div class="body">
-        <h3>${p.name}</h3>
-        <div class="meta">
-          <span>⭐ ${p.rating} · ${p.location} · ${"$".repeat(p.price)}</span>
-          <span class="badge">${p.queue} in queue</span>
-        </div>
-        <div class="actions">
-          <a class="btn small" href="place.html?id=${encodeURIComponent(p.id)}">Open</a>
-          <button class="btn btn--ghost small" data-fav="${p.id}">♡</button>
-        </div>
-      </div>`;
-    grid.appendChild(card);
-  });
-
-  grid.addEventListener("click", (e)=> {
-    const btn = e.target.closest("[data-fav]"); if(!btn) return;
-    const id = btn.getAttribute("data-fav");
-    const p = getAll().find(x=>x.id===id); if(!p) return;
-    const favs = JSON.parse(localStorage.getItem("favorites")||"[]");
-    if (favs.some(f=>f.id===id)) {
-      const i=favs.findIndex(f=>f.id===id); favs.splice(i,1);
-      toast("Removed from favorites");
+// Likes state
+let likedSet = new Set();
+async function loadLikes(){
+  try {
+    const likes = await fetchJSON("/api/likes");
+    likedSet = new Set(likes.map(x => String(x.venueId || x.venue_id || x._id)));
+  } catch { likedSet = new Set(); }
+}
+function isLiked(id){ return likedSet.has(String(id)); }
+async function toggleLike(venueId, btn){
+  try{
+    const idStr = String(venueId);
+    if (isLiked(idStr)){
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"DELETE", credentials:"include" });
+      likedSet.delete(idStr); btn?.classList.remove("on"); toast("Removed from favorites");
     } else {
-      favs.push({id: p.id, name: p.name, rating: p.rating});
-      toast("Added to favorites");
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"POST", credentials:"include" });
+      likedSet.add(idStr); btn?.classList.add("on"); toast("Added to favorites");
     }
-    localStorage.setItem("favorites", JSON.stringify(favs));
-  }, { once: true });
+  }catch(e){
+    if (e?.message?.includes("Unauthorized") || e?.status === 401){
+      const ret = encodeURIComponent(location.pathname + location.search);
+      location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+      return;
+    }
+    toast("Action failed");
+  }
 }
-render();
+
+// Distance helper
+function getUserCoords(){
+  try{ return JSON.parse(localStorage.getItem("userLocation")||"null"); } catch { return null; }
+}
+function km(a, b){
+  if (!a || !b) return Infinity;
+  const R=6371, toRad = d=>d*Math.PI/180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude), lat2 = toRad(b.latitude);
+  const hav = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(hav));
+}
+
+// Build card
+function buildCard(p){
+  const div = document.createElement("div");
+  div.className = "card";
+  const liked = isLiked(p._id);
+  div.innerHTML = `
+    <img src="${p.heroImage || p.image || "./images/restaurant.jpg"}" alt="${p.name}">
+    <div class="body">
+      <h3>${p.name}</h3>
+      <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
+      <div class="row">
+        <button class="join" data-id="${p._id}">Join Queue</button>
+        <button class="heart ${liked ? "on":""}" aria-label="Favorite" data-like="${p._id}">♥</button>
+      </div>
+    </div>`;
+  div.querySelector(".join")?.addEventListener("click", () => {
+    location.href = `place.html?id=${encodeURIComponent(p._id)}`;
+  });
+  div.querySelector(".heart")?.addEventListener("click", (ev) => {
+    ev.stopPropagation(); toggleLike(p._id, ev.currentTarget);
+  });
+  return div;
+}
+
+// Load with filters
+async function load() {
+  const usp = new URLSearchParams(location.search);
+
+  // Normalize type locally too
+  const map = {
+    restaurants: "restaurant",
+    restaurant: "restaurant",
+    salons: "salon",
+    salon: "salon",
+    clinics: "clinic",
+    clinic: "clinic",
+    events: "event",
+    event: "event",
+    others: "other",
+    other: "other",
+  };
+  let type = usp.get("type") || "";
+  if (type) type = map[type.toLowerCase()] || type;
+
+  const q = (document.getElementById("q")?.value || usp.get("q") || "").trim();
+  const loc = (document.getElementById("loc")?.value || "").trim();
+  const price = document.getElementById("price")?.value || "";
+  const rating = document.getElementById("rating")?.value || "";
+  const cuisine = (document.getElementById("cuisine")?.value || "").trim();
+
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (q) params.set("q", q);
+  if (loc) params.set("city", loc);
+  if (price) params.set("price", price);
+  if (rating) params.set("rating", rating);
+  if (cuisine) params.set("cuisine", cuisine);
+
+  // If you're ever opening the page from a different origin (file://, 5500, etc),
+  // use an absolute API base to avoid hitting the wrong host:
+  const API_BASE = window.location.origin; 
+  const url = `${API_BASE}/api/owners/public?${params.toString()}`;
+
+  try {
+    const items = await fetch(url, { credentials: "include" }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+
+    const grid = document.getElementById("venueGrid");
+    grid.innerHTML = "";
+    if (!items.length) {
+      grid.innerHTML = "<p>No results found.</p>";
+      return;
+    }
+
+    items.forEach((p) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <img src="${p.heroImage || "./images/restaurant.jpg"}" alt="${p.name}">
+        <div class="body">
+          <h3>${p.name}</h3>
+          <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
+          <p class="muted">${p.cuisine || ""}</p>
+          <button data-id="${p._id}">View Details</button>
+        </div>`;
+      card.querySelector("button").addEventListener("click", () => {
+        location.href = `place.html?id=${encodeURIComponent(p._id)}`;
+      });
+      grid.appendChild(card);
+    });
+  } catch (err) {
+    console.error("Failed to load venues:", err);
+    const grid = document.getElementById("venueGrid");
+    grid.innerHTML = "<p style='color:#b91c1c'>Failed to load venues.</p>";
+  }
+}
+
+qs("#apply")?.addEventListener("click", load);
+qs("#clear")?.addEventListener("click", () => {
+  qsa("input, select").forEach(el => (el.value = ""));
+  load();
+});
+
+load();

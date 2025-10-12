@@ -1,670 +1,205 @@
-// public/js/ownerDashboard.js
 
-const API_BASE = "http://localhost:3000";
-const FETCH_CREDENTIALS = "include";
+// userDashboard.js — LIVE data + hearts + announcements + graceful fallbacks
 
-// -------------------- Auth + greet --------------------
-(async function guard() {
+// ============== Helpers ==============
+function qs(sel){ return document.querySelector(sel); }
+function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+// Toast (optional UI)
+const toastEl = document.getElementById("toast");
+const toastText = document.getElementById("toastText");
+document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
+function toast(msg){
+  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+  toastText.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
+}
+
+async function fetchJSON(url, opts={}){
+  const r = await fetch(url, { credentials: "include", ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+const greetNameEl = document.getElementById("greetName");
+if (greetNameEl) greetNameEl.textContent = localStorage.getItem("customerName") || "Customer";
+
+// ====== Category buttons → Browse page ======
+document.querySelectorAll(".categories button").forEach((btn) => {
+  const raw = btn.getAttribute("data-type"); // e.g. "restaurants", "salons", etc.
+  btn.addEventListener("click", () => {
+    location.href = `browse.html?type=${encodeURIComponent(raw)}`;
+  });
+});
+
+// Normalize plural/singular category names
+function normalizeType(t){
+  const map = { restaurants:"restaurant", restaurant:"restaurant",
+                salons:"salon", salon:"salon",
+                clinics:"clinic", clinic:"clinic",
+                events:"event", event:"event",
+                services:"other", service:"other", other:"other" };
+  return map[(t||"").toLowerCase()] || t;
+}
+
+// Category buttons → browse
+qsa(".categories button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const raw = btn.getAttribute("data-type");
+    const type = normalizeType(raw);
+    if (type) location.href = `browse.html?type=${encodeURIComponent(type)}`;
+  });
+});
+
+// Explore nearby
+document.getElementById("exploreBtn")?.addEventListener("click", () => {
+  location.href = "browse.html?nearby=1";
+});
+
+// Announcements banner
+fetchJSON("/api/announcements/active")
+  .then(items => {
+    if (!items?.length) return;
+    const b = document.querySelector(".banner .text");
+    if (!b) return;
+    const first = items[0];
+    b.innerHTML = `<h2>${first.type === "offer" ? "🎁 Offer" : "📢 Announcement"}</h2><p>${first.message}</p>`;
+  })
+  .catch(()=>{});
+
+// Favorites (likes) — preload to render hearts
+let likedSet = new Set();
+async function loadLikes(){
   try {
-    const res = await fetch(`${API_BASE}/api/session`, {
-      method: "GET",
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) {
-      location.href = "ownerSignUp.html?role=owner&mode=login";
+    const likes = await fetchJSON("/api/likes");
+    likedSet = new Set(likes.map(x => String(x.venueId || x.venue_id || x._id)));
+  } catch(e){ likedSet = new Set(); }
+}
+function isLiked(id){ return likedSet.has(String(id)); }
+
+function heartButtonHTML(id){
+  const on = isLiked(id) ? "on" : "off";
+  return `<button class="heart ${on}" aria-label="Favorite" data-like="${id}">♥</button>`;
+}
+
+async function toggleLike(venueId, btn){
+  try{
+    const idStr = String(venueId);
+    if (isLiked(idStr)){
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"DELETE", credentials:"include" });
+      likedSet.delete(idStr);
+      btn?.classList.remove("on");
+      toast("Removed from favorites");
+    } else {
+      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"POST", credentials:"include" });
+      likedSet.add(idStr);
+      btn?.classList.add("on");
+      toast("Added to favorites");
+    }
+  }catch(e){
+    if (e?.message?.includes("Unauthorized") || e?.status === 401){
+      const ret = encodeURIComponent(location.pathname + location.search);
+      location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
       return;
     }
-    const data = await res.json();
-    localStorage.setItem("businessName", data.business || "Business");
-    const name = data.business || "Business Name";
-    document.getElementById("businessName").textContent = name;
-    document.getElementById("greetName").textContent = name;
-  } catch {
-    location.href = "ownerSignUp.html?role=owner&mode=login";
+    toast("Action failed");
   }
+}
+
+// Card factory
+function makeCard(p){
+  const div = document.createElement("div");
+  div.className = "card";
+  div.innerHTML = `
+    <div class="card-media">
+      <img src="${p.heroImage || p.image || './images/restaurant.jpg'}" alt="${p.name}">
+      <div class="card-actions">
+        ${heartButtonHTML(p._id)}
+      </div>
+    </div>
+    <div class="body">
+      <h3>${p.name}</h3>
+      <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
+      <button data-id="${p._id}">Join Queue</button>
+    </div>`;
+  div.querySelector("button[data-id]")?.addEventListener("click", () => {
+    location.href = `place.html?id=${encodeURIComponent(p._id)}`;
+  });
+  div.querySelector("button.heart")?.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    toggleLike(p._id, ev.currentTarget);
+  });
+  return div;
+}
+
+// Render rows
+async function renderSection(rowId, typeRaw){
+  const type = normalizeType(typeRaw);
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  row.innerHTML = "<div class='muted'>Loading…</div>";
+
+  try {
+    const list = await fetchJSON(`/api/owners/public?type=${encodeURIComponent(type)}`);
+
+    // sort by rating (desc), then slice top 5
+    const sorted = list
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 5);
+
+    row.innerHTML = "";
+    sorted.forEach(p => row.appendChild(makeCard(p)));
+
+  } catch(e) {
+    console.error("renderSection error", e);
+    row.innerHTML = "<div class='muted'>Failed to load.</div>";
+  }
+}
+
+(async function init(){
+  await loadLikes();
+  renderSection("restaurantsRow", "restaurant");
+  renderSection("salonsRow", "salon");
+  renderSection("clinicsRow", "clinic");
+  renderSection("eventsRow", "event");
 })();
 
-// -------------------- helpers --------------------
-function setDashboardAvatar(src) {
-  const fallback = "./images/default_profile.png";
-  const finalSrc =
-    src && typeof src === "string" && src.length > 10 ? src : fallback;
-  const sidebarImg = document.querySelector(".userchip img");
-  const topImg = document.querySelector(".top .avatar");
-  if (sidebarImg) sidebarImg.src = finalSrc;
-  if (topImg) topImg.src = finalSrc;
-}
+// redirect to profile page on click
+document.getElementById("avatar")?.addEventListener("click", () => {
+  window.location.href = "userProfile.html";
+});
 
-(function paintCachedAvatarFirst() {
-  const cached = localStorage.getItem("ownerAvatar");
-  const fallback = "./images/default_profile.png";
-  setDashboardAvatar(cached || fallback);
+(async function loadAvatar(){
+  try {
+    const me = await fetchJSON("/api/customers/me");
+    const img = document.getElementById("profilePic");
+    if (me.avatar) img.src = me.avatar;
+  } catch {}
 })();
 
-(async function hydrateDashboardAvatar() {
-  try {
-    const res = await fetch(`${API_BASE}/api/owners/me`, {
-      method: "GET",
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    const serverAvatar = data?.profile?.avatar || "";
-    const isUseful =
-      typeof serverAvatar === "string" &&
-      serverAvatar.length > 0 &&
-      !/default_profile\.png$/i.test(serverAvatar);
-    if (isUseful) {
-      setDashboardAvatar(serverAvatar);
-      localStorage.setItem("ownerAvatar", serverAvatar);
-    }
-  } catch (e) {
-    console.warn("hydrateDashboardAvatar error:", e);
-  }
-})();
-
-window.addEventListener("storage", (evt) => {
-  if (evt.key === "ownerAvatar") {
-    const val = evt.newValue || "./images/default_profile.png";
-    setDashboardAvatar(val);
-  }
-});
-
-// -------------------- Sidebar + nav --------------------
-const sidebar = document.getElementById("sidebar");
-const toggleBtn = document.getElementById("sidebarToggle");
-toggleBtn?.addEventListener("click", () => {
-  sidebar?.classList.toggle("collapsed");
-});
-
-const sideLinks = [...document.querySelectorAll(".side-nav .item")];
-sideLinks.forEach((link) => {
-  const href = link.getAttribute("href");
-  if (href && href.startsWith("#")) {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      const id = href.slice(1);
-      const el = document.getElementById(id);
-      if (el) window.scrollTo({ top: el.offsetTop - 10, behavior: "smooth" });
-    });
-  }
-});
-
-const observedIds = ["home", "statsCard"];
-const observedEls = observedIds
-  .map((id) => document.getElementById(id))
-  .filter(Boolean);
-const observer = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        const id = entry.target.id;
-        sideLinks.forEach((a) => {
-          const href = a.getAttribute("href");
-          a.classList.toggle("active", href === `#${id}`);
-        });
-      }
-    });
-  },
-  { root: null, rootMargin: "-30% 0px -60% 0px", threshold: 0.0 }
-);
-observedEls.forEach((el) => observer.observe(el));
-
-// -------------------- Logout --------------------
-document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-  try {
-    await fetch(`${API_BASE}/api/logout`, {
-      method: "POST",
-      credentials: FETCH_CREDENTIALS,
-    });
-  } finally {
-    localStorage.removeItem("businessName");
-    localStorage.removeItem("role");
-    localStorage.removeItem("ownerAvatar");
-    location.href = "ownerSignUp.html?role=owner&mode=login";
-  }
-});
-
-// ======================
-// Controls / Announcements / Queue / Chart
-// ======================
-const walkinBtn = document.getElementById("walkinBtn");
-const openCloseBtn = document.getElementById("openCloseBtn");
-const stopQueueBtn = document.getElementById("stopQueueBtn");
-const restartQueueBtn = document.getElementById("restartQueueBtn");
-
-const announcementInput = document.getElementById("announcementInput");
-const announceBtn = document.getElementById("announceBtn");
-const announceList = document.getElementById("announceList");
-
-const queueList = document.getElementById("queueList");
-const undoBtn = document.getElementById("undoBtn");
-
-const toast = document.getElementById("toast");
-const toastText = document.getElementById("toastText");
-const toastUndo = document.getElementById("toastUndo");
-const toastClose = document.getElementById("toastClose");
-
-const modal = document.getElementById("modal");
-const modalClose = document.getElementById("modalClose");
-const modalClose2 = document.getElementById("modalClose2");
-const undoList = document.getElementById("undoList");
-
-const mWalkins = document.getElementById("mWalkins");
-const mOpen = document.getElementById("mOpen");
-const mQueueCount = document.getElementById("mQueueCount");
-const mAvgWait = document.getElementById("mAvgWait");
-
-// --------- state ---------
-let queue = [];
-let announcements = []; // server-backed
-
-let settings = {
-  walkinsEnabled: false,
-  openStatus: "closed", // "open" | "closed"
-  queueActive: true,
-};
-
-let history = [];
-let undoStack = [];
-let lastRemoved = null;
-
-// --------- small helpers ---------
-function setText(node, text) {
-  if (node) node.textContent = text;
-}
-function showToast(message, withUndo = false) {
-  if (!toast || !toastText) return;
-  toastText.textContent = message;
-  if (toastUndo) toastUndo.style.display = withUndo ? "inline" : "none";
-  toast.classList.add("show");
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => toast.classList.remove("show"), 4000);
-}
-function updateMetrics() {
-  setText(mWalkins, settings.walkinsEnabled ? "Enabled" : "Disabled");
-  setText(mOpen, settings.openStatus === "open" ? "Open" : "Closed");
-  setText(mQueueCount, String(queue.length));
-  const avg = Math.round(
-    (queue.reduce((a, b) => a + (Number(b.people) || 0), 0) * 8) /
-      Math.max(queue.length, 1)
-  );
-  setText(mAvgWait, `${avg}m`);
-}
-
-// -------------------- SETTINGS fetch/apply --------------------
-async function fetchSettings() {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) throw new Error("settings fetch failed");
-    const data = await res.json();
-    const s = data?.settings || {};
-    settings.walkinsEnabled = !!s.walkinsEnabled;
-    settings.openStatus = s.openStatus === "open" ? "open" : "closed";
-    settings.queueActive = s.queueActive !== false;
-    applySettingsToUI();
-  } catch (e) {
-    console.warn("fetchSettings error:", e);
-  }
-}
-
-function applySettingsToUI() {
-  // Walk-ins button text
-  if (walkinBtn) {
-    walkinBtn.textContent = settings.walkinsEnabled
-      ? "Disable Walk-ins"
-      : "Enable Walk-ins";
-  }
-
-  // Open/Close button text
-  if (openCloseBtn) {
-    openCloseBtn.textContent =
-      settings.openStatus === "open" ? "Close" : "Open";
-  }
-
-  // Stop/Restart visibility
-  if (stopQueueBtn && restartQueueBtn) {
-    if (settings.queueActive) {
-      stopQueueBtn.classList.remove("hidden");
-      restartQueueBtn.classList.add("hidden");
-    } else {
-      stopQueueBtn.classList.add("hidden");
-      restartQueueBtn.classList.remove("hidden");
-    }
-  }
-
-  updateMetrics();
-  renderQueue(); // shows "Queue stopped..." message if inactive
-}
-
-// -------------------- SERVER FETCHERS --------------------
-
-// Announcements
-async function fetchAnnouncements() {
-  try {
-    const res = await fetch(`${API_BASE}/api/announcements`, {
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) throw new Error("announcements fetch failed");
-    const data = await res.json();
-    announcements = Array.isArray(data.items) ? data.items : [];
-    renderAnnouncements();
-  } catch (e) {
-    console.warn("fetchAnnouncements error:", e);
-    announcements = [];
-    renderAnnouncements();
-  }
-}
-
-// Queue
-async function fetchQueue() {
-  try {
-    const res = await fetch(`${API_BASE}/api/queue`, {
-      credentials: FETCH_CREDENTIALS,
-    });
-    if (!res.ok) throw new Error("queue fetch failed");
-    const data = await res.json();
-    queue = Array.isArray(data.queue) ? data.queue : [];
-
-    // If the server sent settings with the queue, respect them (authoritative)
-    if (data.settings) {
-      settings.walkinsEnabled = !!data.settings.walkinsEnabled;
-      settings.openStatus =
-        data.settings.openStatus === "open" ? "open" : "closed";
-      settings.queueActive = !!data.settings.queueActive;
-    }
-
-    renderQueue();
-    applySettingsToUI();
-  } catch (e) {
-    console.warn("fetchQueue error:", e);
-    queue = [];
-    renderQueue();
-  }
-}
-
-// -------------------- RENDERERS --------------------
-function renderAnnouncements() {
-  if (!announceList) return;
-  announceList.innerHTML = "";
-  announcements.forEach((item) => {
-    const li = document.createElement("li");
-    li.className = "announce-item";
-    li.innerHTML = `
-      <p>${item.text}</p>
-      <div class="announce-actions">
-        <button class="btn btn--ghost small" data-remove="${item._id}">Remove</button>
-      </div>
-    `;
-    announceList.appendChild(li);
-  });
-}
-
-function renderUndoList() {
-  if (!undoList) return;
-  undoList.innerHTML = "";
-  if (!undoStack.length) {
-    undoList.innerHTML = `<p class="meta">No recent removals.</p>`;
-    return;
-  }
-  undoStack.forEach((u, idx) => {
-    const leftMs = Math.max(0, u.timestamp + 5 * 60 * 1000 - Date.now());
-    const leftMin = Math.floor(leftMs / 60000);
-    const leftSec = Math.floor((leftMs % 60000) / 1000);
-    const row = document.createElement("div");
-    row.className = "undo-item";
-    row.innerHTML = `
-      <div>
-        <strong>${u.item.name}</strong>
-        <div class="meta">${u.item.people} people • expires in ${leftMin}m ${leftSec}s</div>
-      </div>
-      <div>
-        <button class="btn btn--ghost" data-undo="${idx}">Undo</button>
-      </div>
-    `;
-    undoList.appendChild(row);
-  });
-}
-setInterval(() => {
-  if (modal && !modal.classList.contains("hidden")) renderUndoList();
-}, 1000);
-function addToUndoStack(item) {
-  const timestamp = Date.now();
-  undoStack.push({ item, timestamp });
-  setTimeout(
-    () => {
-      undoStack = undoStack.filter((u) => u.item._id !== item._id);
-      if (modal && !modal.classList.contains("hidden")) renderUndoList();
-    },
-    5 * 60 * 1000
-  );
-}
-
-function renderQueue() {
-  if (!queueList) return;
-  queueList.innerHTML = "";
-
-  if (!settings.queueActive) {
-    queueList.innerHTML =
-      "<p style='color:#ef4444'>Queue stopped for the day.</p>";
-    updateMetrics();
-    drawChart();
-    return;
-  }
-
-  if (!queue.length) {
-    queueList.innerHTML =
-      "<p style='color:#6B7280'>No one currently in queue.</p>";
-    updateMetrics();
-    drawChart();
-    return;
-  }
-
-  queue.forEach((q) => {
-    const row = document.createElement("div");
-    row.className = "queue-item";
-    row.innerHTML = `
-      <span>${q.position}. ${q.name} (${q.people} people)</span>
-      <input type="checkbox" class="checkbox" data-id="${q._id}" aria-label="Mark served">
-    `;
-    queueList.appendChild(row);
-  });
-
-  updateMetrics();
-  drawChart();
-}
-
-// -------------------- MODAL --------------------
-function openModal() {
-  if (!modal) return;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
-  renderUndoList();
-}
-function closeModal() {
-  if (!modal) return;
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
-}
-
-// -------------------- CONTROLS (SERVER-BACKED) --------------------
-
-// Walk-ins toggle
-walkinBtn?.addEventListener("click", async () => {
-  try {
-    const next = !settings.walkinsEnabled;
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walkinsEnabled: next }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.walkinsEnabled = !!data.settings.walkinsEnabled;
-    applySettingsToUI();
-    showToast(`Walk-ins ${settings.walkinsEnabled ? "enabled" : "disabled"}`);
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to update walk-ins");
-  }
-});
-
-// Open/Close toggle
-openCloseBtn?.addEventListener("click", async () => {
-  try {
-    const next = settings.openStatus === "open" ? "closed" : "open";
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openStatus: next }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.openStatus = data.settings.openStatus;
-    applySettingsToUI();
-    showToast(
-      `Restaurant set to ${settings.openStatus === "open" ? "Open" : "Closed"}`
-    );
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to update open status");
-  }
-});
-
-// Stop / Restart (persisted)
-stopQueueBtn?.addEventListener("click", async () => {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queueActive: false }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.queueActive = !!data.settings.queueActive;
-    applySettingsToUI();
-    showToast("Queue stopped for the day");
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to stop queue");
-  }
-});
-
-restartQueueBtn?.addEventListener("click", async () => {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queueActive: true }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.queueActive = !!data.settings.queueActive;
-    applySettingsToUI();
-    showToast("Queue restarted");
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to restart queue");
-  }
-});
-
-// -------------------- SSE (live queue) with polling fallback --------------------
-let es;
-function startQueueStream() {
-  if (!window.EventSource) {
-    setInterval(fetchQueue, 5000);
-    return;
-  }
-  es = new EventSource(`${API_BASE}/api/queue/stream`, {
-    withCredentials: true,
-  });
-
-  es.addEventListener("snapshot", (evt) => {
+// Logout button → clear session + local data
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
     try {
-      const data = JSON.parse(evt.data);
-      queue = Array.isArray(data.queue) ? data.queue : [];
-      if (data.settings) {
-        settings.walkinsEnabled = !!data.settings.walkinsEnabled;
-        settings.openStatus =
-          data.settings.openStatus === "open" ? "open" : "closed";
-        settings.queueActive = !!data.settings.queueActive;
-      }
-      renderQueue();
-      applySettingsToUI();
-    } catch (e) {
-      console.warn("SSE parse error:", e);
-    }
-  });
-
-  es.onerror = () => {
-    console.warn("SSE dropped; falling back to polling");
-    try {
-      es.close();
-    } catch {}
-    setInterval(fetchQueue, 5000);
-  };
-}
-
-// -------------------- Announcements (SERVER) --------------------
-announceBtn?.addEventListener("click", async () => {
-  const val = announcementInput?.value?.trim() || "";
-  if (!val) {
-    showToast("Type an announcement first");
-    return;
-  }
-  try {
-    const res = await fetch(`${API_BASE}/api/announcements`, {
-      method: "POST",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: val }),
-    });
-    if (!res.ok) throw new Error("add failed");
-    announcementInput.value = "";
-    await fetchAnnouncements();
-    showToast("Announcement added");
-  } catch (e) {
-    showToast("Failed to add announcement");
-  }
-});
-
-announceList?.addEventListener("click", async (e) => {
-  const btn = e.target.closest("[data-remove]");
-  if (!btn) return;
-  const id = btn.getAttribute("data-remove");
-  try {
-    const res = await fetch(
-      `${API_BASE}/api/announcements/${encodeURIComponent(id)}`,
-      {
-        method: "DELETE",
-        credentials: FETCH_CREDENTIALS,
-      }
-    );
-    if (!res.ok) throw new Error("delete failed");
-    await fetchAnnouncements();
-    showToast("Announcement removed");
-  } catch (e) {
-    showToast("Failed to remove");
-  }
-});
-
-// -------------------- Queue actions (SERVER) --------------------
-queueList?.addEventListener("change", async (e) => {
-  if (e.target.matches(".checkbox") && settings.queueActive) {
-    const id = e.target.dataset.id;
-    try {
-      const res = await fetch(`${API_BASE}/api/queue/serve`, {
-        method: "POST",
-        credentials: FETCH_CREDENTIALS,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error("serve failed");
-      const { removed } = await res.json();
-      if (removed) {
-        addToUndoStack(removed);
-        lastRemoved = removed;
-      }
-      await fetchQueue();
-      showToast(`Removed ${removed?.name ?? "guest"}`, true);
+      await fetch("/api/logout", { method: "POST", credentials: "include" });
     } catch (err) {
-      console.warn(err);
-      showToast("Failed to mark served");
-      e.target.checked = false;
+      console.error("Logout failed", err);
+    } finally {
+      localStorage.clear();
+      location.href = "ownerSignUp.html?role=customer&mode=login";
     }
-  }
-});
-
-// Toast + Modal actions (SERVER restore)
-toastUndo?.addEventListener("click", async () => {
-  if (!lastRemoved) return;
-  try {
-    const res = await fetch(`${API_BASE}/api/queue/restore`, {
-      method: "POST",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ item: lastRemoved }),
-    });
-    if (!res.ok) throw new Error("restore failed");
-    undoStack = undoStack.filter((u) => u.item._id !== lastRemoved._id);
-    await fetchQueue();
-    showToast(`${lastRemoved.name} restored`);
-    lastRemoved = null;
-  } catch (e) {
-    showToast("Failed to restore");
-  }
-});
-toastClose?.addEventListener("click", () => toast.classList.remove("show"));
-undoBtn?.addEventListener("click", openModal);
-modalClose?.addEventListener("click", closeModal);
-modalClose2?.addEventListener("click", closeModal);
-modal?.addEventListener("click", (e) => {
-  if (e.target === modal) closeModal();
-});
-undoList?.addEventListener("click", async (e) => {
-  const btn = e.target.closest("button[data-undo]");
-  if (!btn) return;
-  const idx = Number(btn.getAttribute("data-undo"));
-  const u = undoStack[idx];
-  if (!u) return;
-  try {
-    const res = await fetch(`${API_BASE}/api/queue/restore`, {
-      method: "POST",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ item: u.item }),
-    });
-    if (!res.ok) throw new Error("restore failed");
-    undoStack.splice(idx, 1);
-    await fetchQueue();
-    renderUndoList();
-    showToast(`${u.item.name} restored`);
-  } catch (e2) {
-    showToast("Failed to restore");
-  }
-});
-
-// -------------------- Chart --------------------
-const canvas = document.getElementById("chart");
-const ctx = canvas?.getContext("2d");
-function drawChart() {
-  if (!canvas || !ctx) return;
-  const w = canvas.clientWidth,
-    h = canvas.clientHeight;
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
-  const maxPeople = Math.max(...queue.map((q) => Number(q.people) || 0), 1);
-  const barW = 26,
-    gap = 12,
-    scale = (h - 30) / maxPeople;
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "#8B5CF6";
-  queue.forEach((q, i) => {
-    const ppl = Number(q.people) || 0;
-    const x = i * (barW + gap) + 40;
-    const y = h - ppl * scale - 14;
-    ctx.fillRect(x, y, barW, ppl * scale);
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "12px Plus Jakarta Sans";
-    ctx.fillText(ppl, x + 5, y - 4);
-    ctx.fillStyle = "#8B5CF6";
   });
 }
 
-// -------------------- Init --------------------
-(async function init() {
-  // hydrate settings FIRST so UI reflects persisted state
-  await fetchSettings();
-
-  await fetchAnnouncements();
-  await fetchQueue();
-  startQueueStream();
-})();
+// Geolocation label (optional)
+if (navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{ localStorage.setItem("userLocation", JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })); qs("#userCity") && (qs("#userCity").textContent = "your location"); },
+    ()=>{ qs("#userCity") && (qs("#userCity").textContent = "Boston"); }
+  );
+} else {
+  qs("#userCity") && (qs("#userCity").textContent = "Boston");
+}
