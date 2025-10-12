@@ -29,15 +29,23 @@ let pollingT = null;
 
 // ============== Venue load ==============
 async function loadVenue(){
-  const v = await fetchJSON(`/api/venues/${encodeURIComponent(currentId)}`);
+  const v = await fetchJSON(`/api/owners/public/${encodeURIComponent(currentId)}`);
   qs("#name") && (qs("#name").textContent = v.name);
   qs("#rating") && (qs("#rating").textContent = v.rating ?? "—");
-  qs("#count") && (qs("#count").textContent = v.waiting ?? 0);
-  qs("#cover") && (qs("#cover").src = v.heroImage || v.image || "./images/restaurant.jpg");
-  // approx wait
-  const per = (v.stats?.avgWaitMins) ?? v.waitPerGroup ?? 8;
-  const approx = (v.waiting ?? 0) * per;
-  qs("#wait") && (qs("#wait").textContent = approx ? `${approx} mins` : "—");
+  qs("#cover") && (qs("#cover").src = v.heroImage || "./images/restaurant.jpg");
+  qs("#description") && (qs("#description").textContent = v.description || "");
+  qs("#features") && (qs("#features").textContent = v.features || "");
+  qs("#timing") && (qs("#timing").textContent = `${v.openTime || ""} - ${v.closeTime || ""}`);
+  qs("#location") && (qs("#location").textContent = v.location || "");
+
+  if (v.gallery && v.gallery.length) {
+  const galleryEl = document.getElementById("gallery");
+  if (galleryEl) {
+    galleryEl.innerHTML = v.gallery
+      .map(g => `<img src="${g}" alt="gallery image">`)
+      .join("");
+  }
+}
 
     // unhide main container once venue data is ready
   document.getElementById("main")?.classList.remove("hidden");

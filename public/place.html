@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Sooner | Place</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./css/place.css" />
   </head>
   <body>
@@ -19,13 +22,22 @@
         <img id="cover" src="./images/restaurant.jpg" alt="cover" />
         <div class="meta">
           <h1 id="name">Place</h1>
-          <div id="sub" class="sub">⭐ <span id="rating">4.6</span> · <span id="location">City</span> · <span id="price">$$</span></div>
+          <div id="sub" class="sub">
+            ⭐ <span id="rating">4.6</span> · <span id="location">City</span> ·
+            <span id="price">$$</span>
+          </div>
           <div class="chips">
             <span id="cuisine" class="chip">Cuisine</span>
             <span id="queueBadge" class="chip">0 in queue</span>
           </div>
         </div>
         <button id="favBtn" class="btn btn--ghost">♡ Favorite</button>
+      </section>
+
+      <!-- ✅ NEW GALLERY SECTION -->
+      <section class="gallery-section">
+        <h2>Gallery</h2>
+        <div id="gallery" class="gallery-grid"></div>
       </section>
 
       <section class="layout">
@@ -40,17 +52,28 @@
         <section class="content">
           <!-- Queue card -->
           <article id="queue" class="card">
-            <div class="card__head"><h2>Live Queue</h2><span id="status" class="badge">Open</span></div>
+            <div class="card__head">
+              <h2>Live Queue</h2><span id="status" class="badge">Open</span>
+            </div>
             <div class="queue">
-              <div><strong id="count">0</strong><div class="muted">in queue</div></div>
-              <div><strong id="wait">—</strong><div class="muted">approx wait</div></div>
-              <div><strong id="pos">—</strong><div class="muted">your position</div></div>
+              <div>
+                <strong id="count">0</strong><div class="muted">in queue</div>
+              </div>
+              <div>
+                <strong id="wait">—</strong><div class="muted">approx wait</div>
+              </div>
+              <div>
+                <strong id="pos">—</strong><div class="muted">your position</div>
+              </div>
             </div>
 
             <div id="ctaRow" class="cta-row">
               <button id="enterBtn" class="btn">Enter queue</button>
               <button id="cancelBtn" class="btn btn--ghost hidden">Cancel</button>
-              <label class="people hidden" id="peopleRow">People: <input id="people" type="number" min="1" max="12" value="2"/></label>
+              <label class="people hidden" id="peopleRow">
+                People:
+                <input id="people" type="number" min="1" max="12" value="2" />
+              </label>
             </div>
 
             <div id="timerRow" class="timer hidden">
@@ -88,9 +111,18 @@
           <article id="info" class="card">
             <div class="card__head"><h2>Info</h2></div>
             <div class="grid">
-              <div><strong>Hours</strong><div id="hours">10:00 AM — 11:00 PM</div></div>
-              <div><strong>Features</strong><div id="features">Outdoor seating, wheelchair access</div></div>
-              <div><strong>Contact</strong><div id="contact">N/A</div></div>
+              <div>
+                <strong>Hours</strong>
+                <div id="hours">10:00 AM — 11:00 PM</div>
+              </div>
+              <div>
+                <strong>Features</strong>
+                <div id="features">Outdoor seating, wheelchair access</div>
+              </div>
+              <div>
+                <strong>Contact</strong>
+                <div id="contact">N/A</div>
+              </div>
             </div>
           </article>
         </section>
@@ -100,7 +132,9 @@
     <!-- Toast -->
     <div id="toast" class="toast" aria-live="polite">
       <div class="toast__text" id="toastText">Message</div>
-      <div class="toast__actions"><button id="toastClose" class="icon">✕</button></div>
+      <div class="toast__actions">
+        <button id="toastClose" class="icon">✕</button>
+      </div>
     </div>
 
     <script type="module" src="./js/place.js"></script>

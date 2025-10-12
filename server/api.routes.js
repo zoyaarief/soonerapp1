@@ -157,6 +157,94 @@ const venue = await db.collection("venues").findOne(query);
   res.json({ ...venue, waiting });
 });
 
+// ===================== OWNERS PUBLIC ENDPOINTS (replaces /api/venues) =====================
+
+// list all owners (public view)
+api.get("/owners/public", async (req, res) => {
+  try {
+    const db = getDb();
+    const type = (req.query.type || "").toLowerCase();
+    const filter = type ? { type: { $regex: new RegExp(type, "i") } } : {};
+
+    const owners = await db
+      .collection("owners")
+      .find(filter, {
+        projection: {
+          manager: 0,
+          email: 0,
+          passwordHash: 0,
+          phone: 0,
+        },
+      })
+      .toArray();
+
+    // flatten display info from profile
+    const list = owners.map((o) => {
+      const p = o.profile || {};
+      return {
+        _id: String(o._id),
+        name: p.displayName || o.business || "Unnamed",
+        description: p.description || "",
+        city: p.location || "",
+        cuisine: p.cuisine || "",
+        approxPrice: p.approxPrice || "",
+        rating: p.rating || "—",
+        heroImage: p.avatar || "",
+        features: p.features || "",
+        type: o.type || "",
+        openTime: p.openTime || "",
+        closeTime: p.closeTime || "",
+      };
+    });
+
+    res.json(list);
+  } catch (err) {
+    console.error("Error fetching owners:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// get single owner for place page
+api.get("/owners/public/:id", async (req, res) => {
+  try {
+    const db = getDb();
+    const id = req.params.id;
+
+    const query = ObjectId.isValid(id)
+      ? { _id: new ObjectId(id) }
+      : { _id: id };
+
+    const o = await db.collection("owners").findOne(query, {
+      projection: { passwordHash: 0, email: 0, phone: 0 },
+    });
+
+    if (!o) return res.status(404).json({ error: "Not found" });
+
+    const p = o.profile || {};
+    res.json({
+      _id: String(o._id),
+      name: p.displayName || o.business || "Unnamed",
+      description: p.description || "",
+      cuisine: p.cuisine || "",
+      approxPrice: p.approxPrice || "",
+      location: p.location || "",
+      features: p.features || "",
+      openTime: p.openTime || "",
+      closeTime: p.closeTime || "",
+      waitTime: p.waitTime || "",
+      totalSeats: p.totalSeats || "",
+      heroImage: p.avatar || "",
+      gallery: p.gallery || [],
+      rating: p.rating || "—",
+      type: o.type || "",
+    });
+  } catch (err) {
+    console.error("Error fetching single owner:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+// ===================== END OWNERS PUBLIC ENDPOINTS =====================
+
 api.get("/owner_settings/:venueId", async (req, res) => {
   try {
     const db = getDb();

@@ -136,8 +136,8 @@ async function load() {
 
   // If you're ever opening the page from a different origin (file://, 5500, etc),
   // use an absolute API base to avoid hitting the wrong host:
-  const API_BASE = window.location.origin; // assumes you’re on http://localhost:5000
-  const url = `${API_BASE}/api/venues?${params.toString()}`;
+  const API_BASE = window.location.origin; 
+  const url = `${API_BASE}/api/owners/public?${params.toString()}`;
 
   try {
     const items = await fetch(url, { credentials: "include" }).then((r) => {
@@ -156,11 +156,12 @@ async function load() {
       const card = document.createElement("div");
       card.className = "card";
       card.innerHTML = `
-        <img src="${p.heroImage || p.image || "./images/restaurant.jpg"}" alt="${p.name}">
+        <img src="${p.heroImage || "./images/restaurant.jpg"}" alt="${p.name}">
         <div class="body">
           <h3>${p.name}</h3>
           <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
-          <button data-id="${p._id}">Join Queue</button>
+          <p class="muted">${p.cuisine || ""}</p>
+          <button data-id="${p._id}">View Details</button>
         </div>`;
       card.querySelector("button").addEventListener("click", () => {
         location.href = `place.html?id=${encodeURIComponent(p._id)}`;
