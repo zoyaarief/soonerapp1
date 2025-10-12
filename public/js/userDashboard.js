@@ -140,11 +140,20 @@ async function renderSection(rowId, typeRaw){
   const row = document.getElementById(rowId);
   if (!row) return;
   row.innerHTML = "<div class='muted'>Loading…</div>";
-  try{
-    const list = await fetchJSON(`/api/venues?type=${encodeURIComponent(type)}&limit=12`);
+
+  try {
+    const list = await fetchJSON(`/api/owners/public?type=${encodeURIComponent(type)}`);
+
+    // sort by rating (desc), then slice top 5
+    const sorted = list
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 5);
+
     row.innerHTML = "";
-    list.forEach(p => row.appendChild(makeCard(p)));
-  }catch(e){
+    sorted.forEach(p => row.appendChild(makeCard(p)));
+
+  } catch(e) {
+    console.error("renderSection error", e);
     row.innerHTML = "<div class='muted'>Failed to load.</div>";
   }
 }
@@ -155,6 +164,19 @@ async function renderSection(rowId, typeRaw){
   renderSection("salonsRow", "salon");
   renderSection("clinicsRow", "clinic");
   renderSection("eventsRow", "event");
+})();
+
+// redirect to profile page on click
+document.getElementById("avatar")?.addEventListener("click", () => {
+  window.location.href = "userProfile.html";
+});
+
+(async function loadAvatar(){
+  try {
+    const me = await fetchJSON("/api/customers/me");
+    const img = document.getElementById("profilePic");
+    if (me.avatar) img.src = me.avatar;
+  } catch {}
 })();
 
 // Geolocation label (optional)

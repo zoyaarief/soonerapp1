@@ -48,12 +48,46 @@ api.post("/customers/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash || "");
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    req.session.user = { id: String(user._id), role: "customer", name: user.name, email: user.email };
-    res.json({ ok: true, user: req.session.user });
-  } catch (err) {
-    console.error("Customer login error:", err);
+    req.session.regenerate(err => {
+      if (err) return res.status(500).json({ error: "Session error" });
+      req.session.customerId = String(user._id);
+      req.session.customerName = user.name;
+      req.session.user = {
+        id: String(user._id),
+        role: "customer",
+        name: user.name,
+        email: user.email
+        };
+      req.session.save(err2 => {
+        if (err2) return res.status(500).json({ error: "Session save error" });
+        res.json({ ok: true, user: { id: user._id, name: user.name, email: user.email } });
+      });
+    });
+  } catch (e) {
+    console.error("Login error:", e);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+api.get("/customers/me", async (req, res) => {
+  if (!req.session?.customerId) {
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+
+  const db = getDb();
+  const cust = await db.collection("customers").findOne(
+    { _id: new ObjectId(req.session.customerId) },
+    { projection: { passwordHash: 0 } }
+  );
+  if (!cust) return res.status(404).json({ error: "Customer not found" });
+
+  res.json({
+    id: cust._id,
+    name: cust.name,
+    email: cust.email,
+    phone: cust.phone || "",
+    avatar: cust.avatar || "",
+  });
 });
 
 api.post("/customers/logout", (req, res) => {
@@ -417,6 +451,35 @@ api.get("/announcements/active", async (req, res) => {
     ]
   }).limit(3).toArray();
   res.json(items);
+});
+
+// Get announcement for a specific venue (public)
+// Public: get announcement for a specific venue or restaurant
+api.get("/announcements/venue/:venueId", async (req, res) => {
+  try {
+    const db = getDb();
+    const venueId = req.params.venueId;
+
+    const query = {
+      $or: [
+        { restaurantId: venueId },
+        { venueId: venueId }
+      ],
+      visible: true
+    };
+
+    const ann = await db.collection("announcements").findOne(query, { sort: { createdAt: -1 } });
+    if (!ann) return res.status(404).json({}); // silently ignore when none
+    res.json({
+      id: ann._id,
+      message: ann.message,
+      type: ann.type || "announcement",
+      createdAt: ann.createdAt
+    });
+  } catch (e) {
+    console.error("Error fetching announcement:", e);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 export default api;

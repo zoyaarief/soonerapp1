@@ -47,6 +47,25 @@ async function loadVenue(){
   }
 }
 
+// === load announcement if exists ===
+async function loadAnnouncement(venueId) {
+  try {
+    const a = await fetchJSON(`/api/announcements/venue/${encodeURIComponent(venueId)}`);
+    if (a?.message) {
+      const banner = document.getElementById("announcement");
+      const text = document.getElementById("announcementText");
+      const icon = document.getElementById("announcementIcon");
+      if (banner && text && icon) {
+        icon.textContent = a.type === "offer" ? "🎁" : "📢";
+        text.textContent = a.message;
+        banner.classList.remove("hidden");
+      }
+    }
+  } catch {
+    // no announcement found → ignore
+  }
+}
+
     // unhide main container once venue data is ready
   document.getElementById("main")?.classList.remove("hidden");
 
@@ -66,6 +85,7 @@ async function loadVenue(){
   } catch {
     // ignore missing settings
   }
+  await loadAnnouncement(currentId);
 }
 
 // ============== Queue actions ==============
