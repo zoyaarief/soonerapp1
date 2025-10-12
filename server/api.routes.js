@@ -2,6 +2,9 @@ import express from "express";
 import { getDb } from "./db.js";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
+import likesApi from "./api.likes.js";
+import reviewsApi from "./api.reviews.js";
+import historyApi from "./api.history.js";
 
 const api = express.Router();
 api.use(express.json());
@@ -481,5 +484,9 @@ api.get("/announcements/venue/:venueId", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+api.use("/likes", likesApi);
+api.use("/reviews", reviewsApi);
+api.use("/history", historyApi);
 
 export default api;

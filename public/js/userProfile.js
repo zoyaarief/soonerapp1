@@ -50,18 +50,49 @@ async function loadFavorites() {
 async function loadHistory() {
   try {
     const hist = await fetchJSON("/api/history");
-    const wrap = document.getElementById("history");
-    wrap.innerHTML = "";
-    if (!hist.length) { wrap.textContent = "No past visits yet."; return; }
 
+    // prefer the UL list if present; fallback to the section
+    const listEl = document.getElementById("historyList") || document.getElementById("history");
+    if (!listEl) return;
+
+    listEl.innerHTML = "";
+
+    if (!hist || !hist.length) {
+      listEl.innerHTML = "<p class='muted'>No past visits yet.</p>";
+      return;
+    }
+
+    // Render each served venue as a list item with a 'View' button
     hist.forEach(h => {
-      const div = document.createElement("div");
-      div.className = "card";
-      div.innerHTML = `<h3>${h.name}</h3><p>Served on ${new Date(h.date).toLocaleDateString()}</p>`;
-      wrap.appendChild(div);
+      const li = document.createElement("li");
+      li.className = "list-item"; // optional; your CSS already styles .list > li
+      const date = new Date(h.date).toLocaleDateString();
+
+      li.innerHTML = `
+        <div>
+          <strong>${h.name}</strong><br>
+          <span class="muted">Served on ${date}</span>
+        </div>
+        <button class="btn small" data-id="${h.venueId}">View</button>
+      `;
+
+      listEl.appendChild(li);
     });
-  } catch {
-    document.getElementById("history").textContent = "Failed to load history.";
+
+    // Attach the click handler once (event delegation)
+    if (!listEl._historyBound) {
+      listEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-id]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-id");
+        location.href = `place.html?id=${encodeURIComponent(id)}`;
+      });
+      listEl._historyBound = true;
+    }
+  } catch (err) {
+    console.error(err);
+    const wrap = document.getElementById("history") || document.getElementById("historyList");
+    if (wrap) wrap.innerHTML = "<p class='muted'>Failed to load history.</p>";
   }
 }
 

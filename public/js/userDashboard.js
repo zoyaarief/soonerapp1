@@ -179,6 +179,21 @@ document.getElementById("avatar")?.addEventListener("click", () => {
   } catch {}
 })();
 
+// Logout button → clear session + local data
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await fetch("/api/logout", { method: "POST", credentials: "include" });
+    } catch (err) {
+      console.error("Logout failed", err);
+    } finally {
+      localStorage.clear();
+      location.href = "ownerSignUp.html?role=customer&mode=login";
+    }
+  });
+}
+
 // Geolocation label (optional)
 if (navigator.geolocation){
   navigator.geolocation.getCurrentPosition(
