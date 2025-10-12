@@ -196,24 +196,74 @@ const venue = await db.collection("venues").findOne(query);
 
 // ===================== OWNERS PUBLIC ENDPOINTS (replaces /api/venues) =====================
 
-// list all owners (public view)
+// list all owners (public view) WITH search + filters
 api.get("/owners/public", async (req, res) => {
   try {
     const db = getDb();
-    const type = (req.query.type || "").toLowerCase();
-    const filter = type ? { type: { $regex: new RegExp(type, "i") } } : {};
 
-    const owners = await db
-      .collection("owners")
-      .find(filter, {
-        projection: {
-          manager: 0,
-          email: 0,
-          passwordHash: 0,
-          phone: 0,
-        },
-      })
-      .toArray();
+    // incoming filters from browse.js UI
+    const {
+      type = "",
+      q = "",
+      city = "",
+      price = "",
+      rating = "",
+      cuisine = ""
+    } = req.query;
+
+    const filter = {};
+
+    // Type: exact type match, case-insensitive (e.g., "Restaurant", "Salon")
+    if (type) {
+      filter.type = { $regex: new RegExp(`^${type}$`, "i") };
+    }
+
+    // Text search across name/description/features/cuisine/location
+    if (q) {
+      const rx = new RegExp(q, "i");
+      filter.$or = [
+        { business: rx },
+        { "profile.displayName": rx },
+        { "profile.description": rx },
+        { "profile.features": rx },
+        { "profile.cuisine": rx },
+        { "profile.location": rx }
+      ];
+    }
+
+    // City/location contains
+    if (city) {
+      filter["profile.location"] = { $regex: new RegExp(city, "i") };
+    }
+
+    // Cuisine contains
+    if (cuisine) {
+      filter["profile.cuisine"] = { $regex: new RegExp(cuisine, "i") };
+    }
+
+    // Price: our data keeps "approxPrice" as free text (e.g., "2 people . $50")
+    // so we do a loose regex match rather than numeric compare
+    if (price) {
+      filter["profile.approxPrice"] = { $regex: new RegExp(price, "i") };
+    }
+
+    // Rating: try numeric >= if possible, otherwise ignore
+    const minRating = parseFloat(rating);
+    if (!Number.isNaN(minRating)) {
+      filter["profile.rating"] = { $gte: minRating };
+    }
+
+    const owners = await db.collection("owners").find(filter, {
+      projection: {
+        manager: 0,
+        email: 0,
+        passwordHash: 0,
+        phone: 0
+      }
+    })
+    // we can tweak sorting preference here:
+    // .sort({ "profile.rating": -1, "profile.displayName": 1 })
+    .toArray();
 
     // flatten display info from profile
     const list = owners.map((o) => {
@@ -225,18 +275,18 @@ api.get("/owners/public", async (req, res) => {
         city: p.location || "",
         cuisine: p.cuisine || "",
         approxPrice: p.approxPrice || "",
-        rating: p.rating || "—",
+        rating: p.rating ?? "—",
         heroImage: p.avatar || "",
         features: p.features || "",
         type: o.type || "",
         openTime: p.openTime || "",
-        closeTime: p.closeTime || "",
+        closeTime: p.closeTime || ""
       };
     });
 
     res.json(list);
   } catch (err) {
-    console.error("Error fetching owners:", err);
+    console.error("Error fetching owners (public with filters):", err);
     res.status(500).json({ error: "Server error" });
   }
 });
