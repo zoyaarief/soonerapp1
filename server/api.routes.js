@@ -296,39 +296,6 @@ api.get("/owner_settings/:venueId", async (req, res) => {
   }
 });
 
-// ---------- Likes / Favorites ----------
-api.get("/likes", requireCustomer, async (req, res) => {
-  const db = getDb();
-  const likes = await db.collection("likes")
-    .find({ userId: req.session.user.id })
-    .toArray();
-  res.json(likes);
-});
-
-api.post("/likes/:venueId", requireCustomer, async (req, res) => {
-  const db = getDb();
-  const doc = {
-    userId: req.session.user.id,
-    venueId: req.params.venueId,
-    createdAt: new Date()
-  };
-  await db.collection("likes").updateOne(
-    { userId: doc.userId, venueId: doc.venueId },
-    { $setOnInsert: doc },
-    { upsert: true }
-  );
-  res.json({ ok: true });
-});
-
-api.delete("/likes/:venueId", requireCustomer, async (req, res) => {
-  const db = getDb();
-  await db.collection("likes").deleteOne({
-    userId: req.session.user.id,
-    venueId: req.params.venueId
-  });
-  res.json({ ok: true });
-});
-
 // ---------- Queue ----------
 api.get("/queue/active", requireCustomer, async (req, res) => {
   const db = getDb();
@@ -372,16 +339,20 @@ api.post("/queue/:venueId/join", requireCustomer, async (req, res) => {
   });
   if (existing) return res.status(400).json({ error: "Already in a queue" });
 
-  const order = await nextOrder(db, venueId);
-  const doc = {
-    userId: req.session.user.id,
-    venueId,
-    people: Math.max(1, Math.min(12, Number(people))),
-    status: "waiting",
-    order,
-    createdAt: new Date()
-  };
-  await db.collection("queue").insertOne(doc);
+const order = await nextOrder(db, venueId);
+const count = Math.max(1, Math.min(12, Number(people)));
+const doc = {
+  userId: req.session.user.id,
+  venueId,
+  people: count,
+  partySize: count,      // bridge for owner dashboard compatibility
+  status: "waiting",
+  order,
+  position: order,       // bridge for owner dashboard
+  joinedAt: new Date(),  // bridge field
+  createdAt: new Date()
+};
+await db.collection("queue").insertOne(doc);
 
   await db.collection("activitylog").insertOne({
     userId: doc.userId,
