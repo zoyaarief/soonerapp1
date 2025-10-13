@@ -6,6 +6,18 @@ import likesApi from "./api.likes.js";
 import reviewsApi from "./api.reviews.js";
 import historyApi from "./api.history.js";
 
+// Small helpers to keep code cleaner
+function asId(x) {
+  if (!x) return null;
+  return ObjectId.isValid(x) ? new ObjectId(x) : x; // supports already-ObjectId
+}
+function http400(res, msg) {
+  return res.status(400).json({ error: msg || "Bad request" });
+}
+function http401(res) {
+  return res.status(401).json({ error: "Not authenticated" });
+}
+
 const api = express.Router();
 api.use(express.json());
 
@@ -576,88 +588,258 @@ async function nextOrder(db, venueId) {
   return r.value.value || 1;
 }
 
-api.post("/queue/:venueId/join", requireCustomer, async (req, res) => {
-  const db = getDb();
-  const { people = 2 } = req.body;
-  const venueId = req.params.venueId;
+// POST /api/queue/:venueId/join  (path param)
+api.post("/queue/:venueId/join", async (req, res) => {
+  req.body = { ...(req.body || {}), venueId: req.params.venueId };
+  return enqueue(req, res);
+});
 
-  // fetch owner settings for this venue
-  const settings = await db.collection("owner_settings").findOne({ venueId });
-  if (
-    !settings ||
-    !settings.walkinsEnabled ||
-    settings.openStatus !== "open" ||
-    !settings.queueActive
-  ) {
-    return res.status(403).json({ error: "Queue not active" });
+// POST /api/queue/join  (expects { venueId, partySize? or people? })
+api.post("/queue/join", async (req, res) => {
+  return enqueue(req, res);
+});
+
+// ---- Implementation ----
+async function enqueue(req, res) {
+  try {
+    const db = getDb();
+
+    // 1) Auth — require logged-in customer
+    const customerId = req.session?.customerId;
+    if (!customerId) return http401(res);
+
+    // 2) Resolve inputs
+    const rawVenueId = req.body?.venueId;
+    if (!rawVenueId) return http400(res, "venueId is required");
+
+    const venueId = asId(rawVenueId);
+    const partySize = Number(req.body?.partySize ?? req.body?.people ?? 1);
+    if (!Number.isFinite(partySize) || partySize < 1) {
+      return http400(res, "Invalid party size");
+    }
+
+    // 3) Load customer (validator requires name/email)
+    const customer = await db.collection("customers").findOne(
+      { _id: asId(customerId) },
+      { projection: { name: 1, email: 1 } }
+    );
+    if (!customer) return http401(res);
+
+    const name  = (req.body?.name  || customer.name  || "Customer").toString();
+    const email = (req.body?.email || customer.email || "").toString();
+
+    // 4) Venue settings + optional limits
+    const settings = await db.collection("owner_settings").findOne({ venueId });
+    const openOk   = (settings?.openStatus === "open");
+    const walkOk   = !!settings?.walkinsEnabled;
+    const queueOk  = settings?.queueActive !== false;
+
+    if (!(openOk && walkOk && queueOk)) {
+      return http400(res, "Queue not accepting walk-ins now");
+    }
+
+    // Optional per-venue max booking limit (fallback 12)
+    // From owners.profile.maxBooking if you store it there; else default
+    const owner = await db.collection("owners").findOne(
+      { _id: venueId },
+      { projection: { "profile.maxBooking": 1 } }
+    );
+    const maxBooking = Number(owner?.profile?.maxBooking ?? 12);
+    if (partySize > maxBooking) {
+      return http400(res, `Party size exceeds max allowed (${maxBooking})`);
+    }
+
+    // 5) Capacity check (seats)
+    const totalSeats = Number(settings?.totalSeats ?? 0); // 0 => unlimited
+    if (totalSeats > 0) {
+      const agg = await db.collection("queue").aggregate([
+        { $match: { venueId, status: "active" } },
+        {
+          $group: {
+            _id: null,
+            seats: { $sum: {
+              $ifNull: ["$partySize", { $ifNull: ["$people", 1] }]
+            }}
+          }
+        }
+      ]).toArray();
+
+      const used   = agg[0]?.seats ?? 0;
+      const spotsLeft = Math.max(0, totalSeats - used);
+
+      if (partySize > spotsLeft) {
+        return http400(res, "Not enough spots left for your party size");
+      }
+    }
+
+    // 6) Prevent duplicate active entries
+    // (a) same venue
+    const alreadyHere = await db.collection("queue").findOne({
+      venueId,
+      customerId: customerId,
+      status: "active"
+    });
+    if (alreadyHere) {
+      // return current position instead of error (nicer UX)
+      const allActive = await db.collection("queue")
+        .find({ venueId, status: "active" })
+        .sort({ joinedAt: 1 })
+        .project({ _id: 1 })
+        .toArray();
+      const pos = allActive.findIndex(x => String(x._id) === String(alreadyHere._id));
+      return res.json({
+        ok: true,
+        order: String(alreadyHere._id),
+        position: pos >= 0 ? pos + 1 : null,
+        approxWaitMins: computeApproxWait(settings, (pos >= 0 ? pos + 1 : 0))
+      });
+    }
+
+    // (b) optionally prevent being active in any other venue
+    const otherVenueActive = await db.collection("queue").findOne({
+      customerId: customerId,
+      status: "active"
+    });
+    if (otherVenueActive) {
+      return http400(res, "You are already in another active queue");
+    }
+
+    // 7) Insert queue doc (conform to your validator schema)
+    const doc = {
+      venueId,
+      customerId: customerId,
+      name,
+      email,
+      partySize,
+      status: "active",          // validator enum: active|served|cancelled|no_show
+      joinedAt: new Date()
+    };
+    const ins = await db.collection("queue").insertOne(doc);
+
+    // 8) Activity log (optional but useful)
+    await db.collection("activitylog").insertOne({
+      customerId: customerId,
+      venueId,
+      action: "joined",
+      createdAt: new Date()
+    });
+
+    // 9) Compute position + ETA after insert
+    const after = await db.collection("queue")
+      .find({ venueId, status: "active" })
+      .sort({ joinedAt: 1 })
+      .project({ _id: 1 })
+      .toArray();
+    const idx = after.findIndex(x => String(x._id) === String(ins.insertedId));
+    const position = idx >= 0 ? idx + 1 : null;
+
+    return res.json({
+      ok: true,
+      order: String(ins.insertedId),
+      position,
+      approxWaitMins: computeApproxWait(settings, position || 0)
+    });
+  } catch (err) {
+    console.error("JOIN error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
+}
 
-  // deny if already in queue
-  const existing = await db.collection("queue").findOne({
-    userId: req.session.user.id,
-    status: "waiting"
-  });
-  if (existing) return res.status(400).json({ error: "Already in a queue" });
+function computeApproxWait(settings, position) {
+  const avgPerParty = Number(settings?.avgWaitMins) || 8;
+  return position ? position * avgPerParty : 0;
+}
 
-const order = await nextOrder(db, venueId);
-const count = Math.max(1, Math.min(12, Number(people)));
-const doc = {
-  userId: req.session.user.id,
-  venueId,
-  people: count,
-  partySize: count,      // bridge for owner dashboard compatibility
-  status: "waiting",
-  order,
-  position: order,       // bridge for owner dashboard
-  joinedAt: new Date(),  // bridge field
-  createdAt: new Date()
-};
-await db.collection("queue").insertOne(doc);
 
-  await db.collection("activitylog").insertOne({
-    userId: doc.userId,
-    venueId,
-    type: "queue.entered",
-    at: new Date(),
-    meta: { people: doc.people, order }
-  });
-
-  res.json({ ok: true, order });
+// POST /api/queue/:venueId/cancel
+api.post("/queue/:venueId/cancel", async (req, res) => {
+  req.body = { ...(req.body || {}), venueId: req.params.venueId };
+  return cancelEnqueue(req, res);
 });
 
-api.post("/queue/:venueId/cancel", requireCustomer, async (req, res) => {
-  const db = getDb();
-  const venueId = req.params.venueId;
-
-  const q = await db.collection("queue").findOne({
-    userId: req.session.user.id, venueId, status: "waiting"
-  });
-  if (!q) return res.status(404).json({ error: "No active queue" });
-
-  await db.collection("queue").updateOne({ _id: q._id }, { $set: { status: "canceled" } });
-  await db.collection("activitylog").insertOne({
-    userId: q.userId, venueId, type: "queue.canceled", at: new Date(), meta: { order: q.order }
-  });
-
-  res.json({ ok: true });
+// POST /api/queue/cancel   (expects { venueId })
+api.post("/queue/cancel", async (req, res) => {
+  return cancelEnqueue(req, res);
 });
 
-// when user is <=5, client can call "arrived" (pause timer)
-api.post("/queue/:venueId/arrived", requireCustomer, async (req, res) => {
-  const db = getDb();
-  const doc = await db.collection("queue").findOne({
-    userId: req.session.user.id,
-    venueId: req.params.venueId,
-    status: "waiting"
-  });
-  if (!doc) return res.status(404).json({ error: "No active queue" });
+async function cancelEnqueue(req, res) {
+  try {
+    const db = getDb();
+    const customerId = req.session?.customerId;
+    if (!customerId) return http401(res);
 
-  await db.collection("queue").updateOne(
-    { _id: doc._id },
-    { $set: { timerPaused: true } }
-  );
-  res.json({ ok: true });
+    const venueId = asId(req.body?.venueId);
+    if (!venueId) return http400(res, "venueId is required");
+
+    const q = await db.collection("queue").findOne({
+      venueId,
+      customerId: customerId,
+      status: "active"
+    });
+
+    if (!q) {
+      // Idempotent: nothing to cancel, just succeed
+      return res.json({ ok: true });
+    }
+
+    await db.collection("queue").updateOne(
+      { _id: q._id },
+      { $set: { status: "cancelled", cancelledAt: new Date() } }
+    );
+
+    await db.collection("activitylog").insertOne({
+      customerId: customerId,
+      venueId,
+      action: "cancelled",
+      createdAt: new Date()
+    });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("CANCEL error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+
+// POST /api/queue/:venueId/arrived
+api.post("/queue/:venueId/arrived", async (req, res) => {
+  req.body = { ...(req.body || {}), venueId: req.params.venueId };
+  return arrivedMark(req, res);
 });
+
+// POST /api/queue/arrived  (expects { venueId })
+api.post("/queue/arrived", async (req, res) => {
+  return arrivedMark(req, res);
+});
+
+async function arrivedMark(req, res) {
+  try {
+    const db = getDb();
+    const customerId = req.session?.customerId;
+    if (!customerId) return http401(res);
+
+    const venueId = asId(req.body?.venueId);
+    if (!venueId) return http400(res, "venueId is required");
+
+    const upd = await db.collection("queue").updateOne(
+      { venueId, customerId: customerId, status: "active" },
+      { $set: { arrivedAt: new Date(), arrived: true } }
+    );
+
+    if (!upd.matchedCount) return res.json({ ok: true }); // nothing to mark; idempotent
+    await db.collection("activitylog").insertOne({
+      customerId: customerId,
+      venueId,
+      action: "arrived",
+      createdAt: new Date()
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("ARRIVED error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
 
 // when owner lets them in (owner side will set status: served)
 api.post("/queue/:venueId/served", requireCustomer, async (req, res) => {
