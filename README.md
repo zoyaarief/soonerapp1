@@ -1,4 +1,4 @@
-# Sooner — Virtual Walk‑In Queue Manager
+# Sooner - Virtual Walk‑In Queue Manager
 
 Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in customers** join a **virtual queue** for venues (restaurants, salons, clinics, events), and lets **venue owners** manage walk‑ins efficiently. Customers browse venues, view real‑time queue stats, enter/cancel the queue, get a 45‑minute *near‑turn* timer, and post reviews after they’re served.
 
@@ -6,7 +6,7 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## ✨ Features (Customer‑facing)
+## ✨ Features (Customer‑facing - handled by Piriyajeishree Murali Naidu)
 
 - Browse venues with **search & filters** (type, city, cuisine, rating).
 - **Place page** with live stats: number in queue, approx wait, your position, seats left, status (“Open/Closed”), gallery, announcements, features, hours.
@@ -18,7 +18,7 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 - **Announcements**: venue broadcasts (offers/notices) displayed on the place page.
 - **Favorites**: like/unlike venues from cards.
 
-## ✨ Features (Owner‑facing – handled by teammate)
+## ✨ Features (Owner‑facing – handled by Nandana Pradeep)
 
 - Owner signup/login, profile, gallery management.
 - Owner settings: `openStatus`, `walkinsEnabled`, `queueActive`, `totalSeats`, `avgWaitMins`, `maxBooking`.
@@ -81,7 +81,7 @@ public/
 
 ---
 
-## 🛣️ Key API Endpoints (Customer‑relevant)
+## Key API Endpoints (Customer‑relevant)
 
 - `GET /api/owners/public`
 - `GET /api/owners/public/:id`
@@ -95,7 +95,7 @@ public/
 
 ---
 
-## 🧠 Queue Rules (Customer join)
+## Queue Rules (Customer join)
 
 - Venue must be **open**, **walk‑ins enabled**, **queue active**.
 - **Capacity**: `owner_settings.totalSeats` must have enough spots left (sum of active `partySize`).
@@ -130,17 +130,44 @@ NODE_ENV=development
 ---
 
 ## ▶️ Run Locally
+**Prereqs**
 
+1. Install Node.js 18+ (LTS recommended).
+2. Have a MongoDB Atlas connection string. (we have provided in the .env section below)
+3. Clone & enter
+```bash
+git clone <repo-url> soonerapp1
+cd soonerapp1
+```
+4. Env file
+Create a .env in the project root:
+```bash
+PORT=3000
+MONGODB_URI=<your Atlas connection string>
+SESSION_SECRET=change-me
+NODE_ENV=development
+```
+5. Install deps
 ```bash
 npm install
-npm run lint      # optional
-npm run format    # optional
-npm start         # node server/server.js
 ```
+6. Start server
+```bash
+npm start
+```
+7. Open the app
+Visit: http://localhost:3000
 
+8. Lint/format
+```bash
+npm run lint
+npm run format
+```
+9. (Optional) Seed quick data
+Create an owner via Owner Sign Up in the UI, or insert small sample docs into owners (strictly avoid large base64 images; otherwise, it will significantly slow down our app).
 ---
 
-## ✅ Rubric Mapping
+## Rubric Mapping
 
 - **Project description:** See top.
 - **Personas & Stories:** See `DESIGN.md`.
