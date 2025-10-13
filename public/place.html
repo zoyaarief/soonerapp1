@@ -11,50 +11,57 @@
     <link rel="stylesheet" href="./css/place.css" />
   </head>
   <body>
-    <header class="bar">
-      <a href="javascript:history.back()" class="link">← Back</a>
-      <div class="brand">Sooner</div>
-      <a href="userDashboard.html" class="link">Dashboard</a>
-    </header>
-
+    <!-- no top bar; sidebar + content layout -->
     <main id="main" class="main hidden">
-      <section class="hero">
-        <img id="cover" src="./images/restaurant.jpg" alt="cover" />
-        <div class="meta">
-          <h1 id="name">Place</h1>
-          <div id="sub" class="sub">
-            ⭐ <span id="rating">4.6</span> · <span id="location">City</span> ·
-            <span id="price">$$</span>
-          </div>
-          <div class="chips">
-            <span id="cuisine" class="chip">Cuisine</span>
-            <span id="queueBadge" class="chip">0 in queue</span>
-          </div>
-        </div>
-        <button id="favBtn" class="btn btn--ghost">♡ Favorite</button>
-        <!-- Announcement banner -->
-        <div id="announcement" class="announcement hidden">
-          <span id="announcementIcon">📢</span>
-          <span id="announcementText"></span>
-        </div>
-      </section>
-
-      <!-- ✅ NEW GALLERY SECTION -->
-      <section class="gallery-section">
-        <h2>Gallery</h2>
-        <div id="gallery" class="gallery-grid"></div>
-      </section>
-
       <section class="layout">
+        <!-- ===== SIDENAV: full-height, now includes Back + Dashboard ===== -->
         <aside class="sidebar">
           <nav>
+            <a href="javascript:history.back()" class="item">
+              ← Back
+            </a>
+            <a href="userDashboard.html" class="item">
+              🏠 Dashboard
+            </a>
+            <hr class="side-sep" />
             <a href="#queue" class="item active">Queue</a>
             <a href="#reviews" class="item">Reviews</a>
             <a href="#info" class="item">Info</a>
           </nav>
         </aside>
 
+        <!-- ===== CONTENT ===== -->
         <section class="content">
+
+          <!-- HERO -->
+          <section class="hero">
+            <img id="cover" src="./images/restaurant.jpg" alt="cover" />
+            <div class="meta">
+              <h1 id="name">Place</h1>
+              <div id="sub" class="sub">
+                ⭐ <span id="rating">4.6</span> · <span id="location">City</span> ·
+                <span id="price">$$</span>
+              </div>
+              <div class="chips">
+                <span id="cuisine" class="chip">Cuisine</span>
+                <span id="queueBadge" class="chip">0 in queue</span>
+              </div>
+            </div>
+            <button id="favBtn" class="btn btn--ghost">♡ Favorite</button>
+
+            <!-- Announcement -->
+            <div id="announcement" class="announcement hidden">
+              <span id="announcementIcon">📢</span>
+              <span id="announcementText"></span>
+            </div>
+          </section>
+
+          <!-- GALLERY -->
+          <section class="gallery-section">
+            <h2>Gallery</h2>
+            <div id="gallery" class="gallery-grid"></div>
+          </section>
+
           <!-- Queue card -->
           <article id="queue" class="card">
             <div class="card__head">
