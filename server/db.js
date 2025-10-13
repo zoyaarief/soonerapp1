@@ -22,12 +22,40 @@ export async function connectToDb() {
 
   // Useful index: unique email for owners
   await db.collection("owners").createIndex({ email: 1 }, { unique: true });
+
+  // Venues collection (legacy)
   await db.collection("venues").createIndex({ category: 1, rating: -1 });
-  await db.collection("venues").createIndex({ "location": "2dsphere" }); // if you store coords
-  await db.collection("likes").createIndex({ userId: 1, venueId: 1 }, { unique: true });
+  await db.collection("venues").createIndex({ location: "2dsphere" });
+
+  // Likes
+  await db
+    .collection("likes")
+    .createIndex({ userId: 1, venueId: 1 }, { unique: true });
+
+  // Queue
   await db.collection("queue").createIndex({ venueId: 1, status: 1, order: 1 });
   await db.collection("queue").createIndex({ userId: 1, status: 1 });
-  await db.collection("queue").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await db
+    .collection("queue")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // 🔥 Owners/public performance indexes
+  await db.collection("owners").createIndex({ type: 1 });
+  await db.collection("owners").createIndex({ "profile.rating": -1 });
+  await db.collection("owners").createIndex({ "profile.displayName": 1 });
+
+  // Text search across common fields for `q`
+  await db.collection("owners").createIndex({
+    "profile.displayName": "text",
+    "profile.description": "text",
+    "profile.features": "text",
+    "profile.cuisine": "text",
+    "profile.location": "text",
+  });
+
+  // Optional prefix indexes for faster anchored regex
+  await db.collection("owners").createIndex({ "profile.location": 1 });
+  await db.collection("owners").createIndex({ "profile.cuisine": 1 });
 
   return db;
 }

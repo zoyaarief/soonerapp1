@@ -1,3 +1,4 @@
+// server/api.routes.js
 import express from "express";
 import { getDb } from "./db.js";
 import { ObjectId } from "mongodb";
@@ -9,29 +10,57 @@ import historyApi from "./api.history.js";
 const api = express.Router();
 api.use(express.json());
 
+// ---------- Helpers ----------
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+const asStr = (v) => (v == null ? "" : String(v));
+
 // ---------- Customer Auth ----------
 api.post("/customers/signup", async (req, res) => {
   try {
     const db = getDb();
-    const { name, email, password } = req.body || {};
-    if (!name?.trim() || !email?.trim() || !password || password.length < 6) {
+    const { name, phone, email, username, password } = req.body || {};
+    if (
+      !name?.trim() ||
+      !email?.trim() ||
+      !username?.trim() ||
+      !password ||
+      password.length < 6
+    ) {
       return res.status(400).json({ error: "Invalid input" });
     }
 
-    const existing = await db.collection("customers").findOne({ email: email.trim().toLowerCase() });
-    if (existing) return res.status(409).json({ error: "Email already exists" });
+    // unique constraints
+    const existing = await db.collection("customers").findOne({
+      $or: [
+        { email: email.trim().toLowerCase() },
+        { username: username.trim().toLowerCase() },
+      ],
+    });
+    if (existing)
+      return res
+        .status(409)
+        .json({ error: "Email or username already exists" });
 
     const passwordHash = await bcrypt.hash(password, 10);
     const doc = {
       name: name.trim(),
+      phone: asStr(phone).trim(),
       email: email.trim().toLowerCase(),
+      username: username.trim().toLowerCase(),
       passwordHash,
       createdAt: new Date(),
     };
     const result = await db.collection("customers").insertOne(doc);
 
-    // create session
-    req.session.user = { id: String(result.insertedId), role: "customer", name: doc.name, email: doc.email };
+    req.session.user = {
+      id: String(result.insertedId),
+      role: "customer",
+      name: doc.name,
+      email: doc.email,
+      username: doc.username,
+    };
     res.json({ ok: true, user: req.session.user });
   } catch (err) {
     console.error("Customer signup error:", err);
@@ -42,16 +71,23 @@ api.post("/customers/signup", async (req, res) => {
 api.post("/customers/login", async (req, res) => {
   try {
     const db = getDb();
-    const { email, password } = req.body || {};
-    if (!email?.trim() || !password) return res.status(400).json({ error: "Missing email/password" });
+    const { username, email, password } = req.body || {};
+    if (!(username || email) || !password)
+      return res
+        .status(400)
+        .json({ error: "Missing username/email or password" });
 
-    const user = await db.collection("customers").findOne({ email: email.trim().toLowerCase() });
+    const query = username
+      ? { username: username.trim().toLowerCase() }
+      : { email: email.trim().toLowerCase() };
+
+    const user = await db.collection("customers").findOne(query);
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = await bcrypt.compare(password, user.passwordHash || "");
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    req.session.regenerate(err => {
+    req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: "Session error" });
       req.session.customerId = String(user._id);
       req.session.customerName = user.name;
@@ -59,11 +95,20 @@ api.post("/customers/login", async (req, res) => {
         id: String(user._id),
         role: "customer",
         name: user.name,
-        email: user.email
-        };
-      req.session.save(err2 => {
+        email: user.email,
+        username: user.username,
+      };
+      req.session.save((err2) => {
         if (err2) return res.status(500).json({ error: "Session save error" });
-        res.json({ ok: true, user: { id: user._id, name: user.name, email: user.email } });
+        res.json({
+          ok: true,
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            username: user.username,
+          },
+        });
       });
     });
   } catch (e) {
@@ -76,18 +121,20 @@ api.get("/customers/me", async (req, res) => {
   if (!req.session?.customerId) {
     return res.status(401).json({ error: "Not authenticated" });
   }
-
   const db = getDb();
-  const cust = await db.collection("customers").findOne(
-    { _id: new ObjectId(req.session.customerId) },
-    { projection: { passwordHash: 0 } }
-  );
+  const cust = await db
+    .collection("customers")
+    .findOne(
+      { _id: new ObjectId(req.session.customerId) },
+      { projection: { passwordHash: 0 } }
+    );
   if (!cust) return res.status(404).json({ error: "Customer not found" });
 
   res.json({
     id: cust._id,
     name: cust.name,
     email: cust.email,
+    username: cust.username,
     phone: cust.phone || "",
     avatar: cust.avatar || "",
   });
@@ -100,7 +147,6 @@ api.post("/customers/logout", (req, res) => {
   });
 });
 
-// for checking in who's logged in
 api.get("/customers/session", (req, res) => {
   if (req.session?.user) return res.json({ ok: true, user: req.session.user });
   res.status(401).json({ ok: false });
@@ -112,13 +158,12 @@ function requireCustomer(req, res, next) {
   return res.status(401).json({ error: "Unauthorized" });
 }
 
-// ---------- Venues ----------
+// ---------- Venues (legacy — waiting count) ----------
 api.get("/venues", async (req, res) => {
   try {
     const db = getDb();
     let { type, q, city, price, rating, cuisine, limit = 20 } = req.query;
 
-    // Normalize type (accept plural/singular)
     const map = {
       restaurants: "restaurant",
       restaurant: "restaurant",
@@ -131,45 +176,34 @@ api.get("/venues", async (req, res) => {
       others: "other",
       other: "other",
     };
-    if (typeof type === "string") {
-      type = map[type.toLowerCase()] || type;
-    }
+    if (typeof type === "string") type = map[type.toLowerCase()] || type;
 
-    // Build filter safely (ignore empty / undefined / 'undefined')
     const filter = {};
-    if (type && type !== "undefined" && type !== "null") {
-      filter.category = type;
-    }
+    if (type) filter.category = type;
     if (q && q.trim()) {
       filter.$or = [
-        { name: new RegExp(q.trim(), "i") },
-        { cuisine: new RegExp(q.trim(), "i") },
+        { name: new RegExp(escapeRegExp(q.trim()), "i") },
+        { cuisine: new RegExp(escapeRegExp(q.trim()), "i") },
       ];
     }
     if (city && city.trim()) {
-      const rx = new RegExp(city.trim(), "i");
-      // match either top-level "city" OR nested "location.city"
-      filter.$and = (filter.$and || []).concat([{ $or: [{ city: rx }, { "location.city": rx }] }]);
+      const rx = new RegExp("^" + escapeRegExp(city.trim()), "i");
+      filter.$and = (filter.$and || []).concat([
+        { $or: [{ city: rx }, { "location.city": rx }] },
+      ]);
     }
-    if (price && price !== "undefined" && !Number.isNaN(Number(price))) {
-      filter.price = Number(price);
-    }
-    if (rating && rating !== "undefined" && !Number.isNaN(Number(rating))) {
+    if (price && !Number.isNaN(Number(price))) filter.price = Number(price);
+    if (rating && !Number.isNaN(Number(rating)))
       filter.rating = { $gte: Number(rating) };
-    }
-    if (cuisine && cuisine.trim()) {
-      filter.cuisine = new RegExp(cuisine.trim(), "i");
-    }
+    if (cuisine && cuisine.trim())
+      filter.cuisine = new RegExp("^" + escapeRegExp(cuisine.trim()), "i");
 
     const items = await db
       .collection("venues")
-      .find(filter)
+      .find(filter, { projection: { gallery: 0, bigBlob: 0 } })
       .sort({ rating: -1 })
       .limit(Number(limit))
       .toArray();
-
-    // Debug line (temporary): see what browse is sending
-    console.log("[/api/venues] query:", req.query, "filter:", filter, "returned:", items.length);
 
     res.json(items);
   } catch (err) {
@@ -178,95 +212,90 @@ api.get("/venues", async (req, res) => {
   }
 });
 
-
 api.get("/venues/:id", async (req, res) => {
   const db = getDb();
-  const venueId = req.params.id;
-  //const venue = await db.collection("venues").findOne({ _id: venueId });
-  const query = ObjectId.isValid(venueId)
-  ? { _id: new ObjectId(venueId) }
-  : { _id: venueId };
+  const venueId = String(req.params.id);
 
-const venue = await db.collection("venues").findOne(query);
+  const query = ObjectId.isValid(venueId)
+    ? { _id: new ObjectId(venueId) }
+    : { _id: venueId };
+  const venue = await db.collection("venues").findOne(query);
   if (!venue) return res.status(404).json({ error: "Not found" });
 
-  const waiting = await db.collection("queue").countDocuments({ venueId, status: "waiting" });
+  const waiting = await db
+    .collection("queue")
+    .countDocuments({ venueId: venueId, status: "waiting" });
   res.json({ ...venue, waiting });
 });
 
-// ===================== OWNERS PUBLIC ENDPOINTS (replaces /api/venues) =====================
-
-// list all owners (public view) WITH search + filters
+// ===================== OWNERS PUBLIC =====================
 api.get("/owners/public", async (req, res) => {
   try {
     const db = getDb();
-
-    // incoming filters from browse.js UI
     const {
       type = "",
       q = "",
       city = "",
       price = "",
       rating = "",
-      cuisine = ""
+      cuisine = "",
+      page = "1",
+      limit = "24",
     } = req.query;
 
+    const limitNum = Math.min(Number(limit) || 24, 100);
+    const pageNum = Math.max(Number(page) || 1, 1);
+    const skip = (pageNum - 1) * limitNum;
+
     const filter = {};
+    if (type)
+      filter.type = { $regex: new RegExp(`^${escapeRegExp(type)}$`, "i") };
+    if (q) filter.$text = { $search: q };
+    if (city)
+      filter["profile.location"] = {
+        $regex: new RegExp("^" + escapeRegExp(city), "i"),
+      };
+    if (cuisine)
+      filter["profile.cuisine"] = {
+        $regex: new RegExp("^" + escapeRegExp(cuisine), "i"),
+      };
+    if (price)
+      filter["profile.approxPrice"] = {
+        $regex: new RegExp(escapeRegExp(price), "i"),
+      };
 
-    // Type: exact type match, case-insensitive (e.g., "Restaurant", "Salon")
-    if (type) {
-      filter.type = { $regex: new RegExp(`^${type}$`, "i") };
-    }
-
-    // Text search across name/description/features/cuisine/location
-    if (q) {
-      const rx = new RegExp(q, "i");
-      filter.$or = [
-        { business: rx },
-        { "profile.displayName": rx },
-        { "profile.description": rx },
-        { "profile.features": rx },
-        { "profile.cuisine": rx },
-        { "profile.location": rx }
-      ];
-    }
-
-    // City/location contains
-    if (city) {
-      filter["profile.location"] = { $regex: new RegExp(city, "i") };
-    }
-
-    // Cuisine contains
-    if (cuisine) {
-      filter["profile.cuisine"] = { $regex: new RegExp(cuisine, "i") };
-    }
-
-    // Price: our data keeps "approxPrice" as free text (e.g., "2 people . $50")
-    // so we do a loose regex match rather than numeric compare
-    if (price) {
-      filter["profile.approxPrice"] = { $regex: new RegExp(price, "i") };
-    }
-
-    // Rating: try numeric >= if possible, otherwise ignore
     const minRating = parseFloat(rating);
-    if (!Number.isNaN(minRating)) {
+    if (!Number.isNaN(minRating))
       filter["profile.rating"] = { $gte: minRating };
-    }
 
-    const owners = await db.collection("owners").find(filter, {
-      projection: {
-        manager: 0,
-        email: 0,
-        passwordHash: 0,
-        phone: 0
-      }
-    })
-    // we can tweak sorting preference here:
-    // .sort({ "profile.rating": -1, "profile.displayName": 1 })
-    .toArray();
+    const cursor = db
+      .collection("owners")
+      .find(filter, {
+        projection: {
+          business: 1,
+          type: 1,
+          "profile.displayName": 1,
+          "profile.description": 1,
+          "profile.cuisine": 1,
+          "profile.location": 1,
+          "profile.approxPrice": 1,
+          "profile.rating": 1,
+          "profile.avatar": 1,
+          "profile.openTime": 1,
+          "profile.closeTime": 1,
+          "profile.features": 1,
+        },
+      })
+      .sort({ "profile.rating": -1, "profile.displayName": 1 })
+      .skip(skip)
+      .limit(limitNum);
 
-    // flatten display info from profile
-    const list = owners.map((o) => {
+    const [owners, total] = await Promise.all([
+      cursor.toArray(),
+      db.collection("owners").countDocuments(filter),
+    ]);
+
+    const items = owners.map((o) => {
       const p = o.profile || {};
       return {
         _id: String(o._id),
@@ -280,23 +309,21 @@ api.get("/owners/public", async (req, res) => {
         features: p.features || "",
         type: o.type || "",
         openTime: p.openTime || "",
-        closeTime: p.closeTime || ""
+        closeTime: p.closeTime || "",
       };
     });
 
-    res.json(list);
+    res.json({ items, total, page: pageNum, limit: limitNum });
   } catch (err) {
     console.error("Error fetching owners (public with filters):", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// get single owner for place page
 api.get("/owners/public/:id", async (req, res) => {
   try {
     const db = getDb();
-    const id = req.params.id;
-
+    const id = String(req.params.id);
     const query = ObjectId.isValid(id)
       ? { _id: new ObjectId(id) }
       : { _id: id };
@@ -304,7 +331,6 @@ api.get("/owners/public/:id", async (req, res) => {
     const o = await db.collection("owners").findOne(query, {
       projection: { passwordHash: 0, email: 0, phone: 0 },
     });
-
     if (!o) return res.status(404).json({ error: "Not found" });
 
     const p = o.profile || {};
@@ -330,16 +356,28 @@ api.get("/owners/public/:id", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-// ===================== END OWNERS PUBLIC ENDPOINTS =====================
 
 api.get("/owner_settings/:venueId", async (req, res) => {
   try {
     const db = getDb();
-    const s = await db
-      .collection("owner_settings")
-      .findOne({ venueId: req.params.venueId });
+    const id = String(req.params.venueId);
+    const asObj = ObjectId.isValid(id) ? new ObjectId(id) : null;
+
+    const s = await db.collection("owner_settings").findOne({
+      $or: [
+        asObj && { ownerId: asObj },
+        { ownerId: id },
+        asObj && { venueId: asObj },
+        { venueId: id },
+      ].filter(Boolean),
+    });
+
     if (!s) return res.status(404).json({ error: "Settings not found" });
-    res.json(s);
+    res.json({
+      walkinsEnabled: !!s.walkinsEnabled,
+      openStatus: s.openStatus === "open" ? "open" : "closed",
+      queueActive: s.queueActive !== false,
+    });
   } catch (err) {
     console.error("Error fetching owner settings:", err);
     res.status(500).json({ error: "Server error" });
@@ -351,28 +389,31 @@ api.get("/queue/active", requireCustomer, async (req, res) => {
   const db = getDb();
   const q = await db.collection("queue").findOne({
     userId: req.session.user.id,
-    status: "waiting"
+    status: "waiting",
   });
   res.json(q || null);
 });
 
 // compute next order atomically per venue
 async function nextOrder(db, venueId) {
-  const r = await db.collection("settings").findOneAndUpdate(
-    { _id: `seq:order:${venueId}` },
-    { $inc: { value: 1 } },
-    { upsert: true, returnDocument: "after" }
-  );
+  const r = await db
+    .collection("settings")
+    .findOneAndUpdate(
+      { _id: `seq:order:${venueId}` },
+      { $inc: { value: 1 } },
+      { upsert: true, returnDocument: "after" }
+    );
   return r.value.value || 1;
 }
 
 api.post("/queue/:venueId/join", requireCustomer, async (req, res) => {
   const db = getDb();
   const { people = 2 } = req.body;
-  const venueId = req.params.venueId;
+  const venueId = String(req.params.venueId);
 
-  // fetch owner settings for this venue
-  const settings = await db.collection("owner_settings").findOne({ venueId });
+  const settings = await db
+    .collection("owner_settings")
+    .findOne({ ownerId: venueId });
   if (
     !settings ||
     !settings.walkinsEnabled ||
@@ -382,34 +423,33 @@ api.post("/queue/:venueId/join", requireCustomer, async (req, res) => {
     return res.status(403).json({ error: "Queue not active" });
   }
 
-  // deny if already in queue
   const existing = await db.collection("queue").findOne({
     userId: req.session.user.id,
-    status: "waiting"
+    status: "waiting",
   });
   if (existing) return res.status(400).json({ error: "Already in a queue" });
 
-const order = await nextOrder(db, venueId);
-const count = Math.max(1, Math.min(12, Number(people)));
-const doc = {
-  userId: req.session.user.id,
-  venueId,
-  people: count,
-  partySize: count,      // bridge for owner dashboard compatibility
-  status: "waiting",
-  order,
-  position: order,       // bridge for owner dashboard
-  joinedAt: new Date(),  // bridge field
-  createdAt: new Date()
-};
-await db.collection("queue").insertOne(doc);
+  const order = await nextOrder(db, venueId);
+  const count = Math.max(1, Math.min(12, Number(people)));
+  const doc = {
+    userId: req.session.user.id,
+    venueId, // store as string
+    people: count,
+    partySize: count,
+    status: "waiting",
+    order,
+    position: order,
+    joinedAt: new Date(),
+    createdAt: new Date(),
+  };
+  await db.collection("queue").insertOne(doc);
 
   await db.collection("activitylog").insertOne({
-    userId: doc.userId,
-    venueId,
     type: "queue.entered",
     at: new Date(),
-    meta: { people: doc.people, order }
+    userIdStr: doc.userId,
+    venueIdStr: venueId,
+    meta: { people: doc.people, order },
   });
 
   res.json({ ok: true, order });
@@ -417,49 +457,72 @@ await db.collection("queue").insertOne(doc);
 
 api.post("/queue/:venueId/cancel", requireCustomer, async (req, res) => {
   const db = getDb();
-  const venueId = req.params.venueId;
+  const venueId = String(req.params.venueId);
 
   const q = await db.collection("queue").findOne({
-    userId: req.session.user.id, venueId, status: "waiting"
+    userId: req.session.user.id,
+    venueId,
+    status: "waiting",
   });
   if (!q) return res.status(404).json({ error: "No active queue" });
 
-  await db.collection("queue").updateOne({ _id: q._id }, { $set: { status: "canceled" } });
+  await db
+    .collection("queue")
+    .updateOne(
+      { _id: q._id },
+      { $set: { status: "canceled", updatedAt: new Date() } }
+    );
   await db.collection("activitylog").insertOne({
-    userId: q.userId, venueId, type: "queue.canceled", at: new Date(), meta: { order: q.order }
+    type: "queue.canceled",
+    at: new Date(),
+    userIdStr: q.userId,
+    venueIdStr: venueId,
+    meta: { order: q.order },
   });
 
   res.json({ ok: true });
 });
 
-// when user is <=5, client can call "arrived" (pause timer)
 api.post("/queue/:venueId/arrived", requireCustomer, async (req, res) => {
   const db = getDb();
   const doc = await db.collection("queue").findOne({
     userId: req.session.user.id,
-    venueId: req.params.venueId,
-    status: "waiting"
+    venueId: String(req.params.venueId),
+    status: "waiting",
   });
   if (!doc) return res.status(404).json({ error: "No active queue" });
 
-  await db.collection("queue").updateOne(
-    { _id: doc._id },
-    { $set: { timerPaused: true } }
-  );
+  await db
+    .collection("queue")
+    .updateOne(
+      { _id: doc._id },
+      { $set: { timerPaused: true, updatedAt: new Date() } }
+    );
   res.json({ ok: true });
 });
 
-// when owner lets them in (owner side will set status: served)
 api.post("/queue/:venueId/served", requireCustomer, async (req, res) => {
   const db = getDb();
+  const venueId = String(req.params.venueId);
   const q = await db.collection("queue").findOne({
-    userId: req.session.user.id, venueId: req.params.venueId, status: "waiting"
+    userId: req.session.user.id,
+    venueId,
+    status: "waiting",
   });
   if (!q) return res.status(404).json({ error: "No active queue" });
 
-  await db.collection("queue").updateOne({ _id: q._id }, { $set: { status: "served" } });
+  await db
+    .collection("queue")
+    .updateOne(
+      { _id: q._id },
+      { $set: { status: "served", updatedAt: new Date() } }
+    );
   await db.collection("activitylog").insertOne({
-    userId: q.userId, venueId: q.venueId, type: "queue.served", at: new Date(), meta: { order: q.order }
+    type: "queue.served",
+    at: new Date(),
+    userIdStr: q.userId,
+    venueIdStr: venueId,
+    meta: { order: q.order },
   });
   res.json({ ok: true });
 });
@@ -468,37 +531,36 @@ api.post("/queue/:venueId/served", requireCustomer, async (req, res) => {
 api.get("/announcements/active", async (req, res) => {
   const now = new Date();
   const db = getDb();
-  const items = await db.collection("announcements").find({
-    $or: [
-      { startsAt: { $lte: now }, endsAt: { $gte: now } },
-      { startsAt: { $exists: false }, endsAt: { $exists: false } }
-    ]
-  }).limit(3).toArray();
+  const items = await db
+    .collection("announcements")
+    .find({
+      $or: [
+        { startsAt: { $lte: now }, endsAt: { $gte: now } },
+        { startsAt: { $exists: false }, endsAt: { $exists: false } },
+      ],
+    })
+    .limit(3)
+    .toArray();
   res.json(items);
 });
 
-// Get announcement for a specific venue (public)
-// Public: get announcement for a specific venue or restaurant
 api.get("/announcements/venue/:venueId", async (req, res) => {
   try {
     const db = getDb();
-    const venueId = req.params.venueId;
-
+    const venueId = String(req.params.venueId);
     const query = {
-      $or: [
-        { restaurantId: venueId },
-        { venueId: venueId }
-      ],
-      visible: true
+      $or: [{ restaurantId: venueId }, { venueId: venueId }],
+      visible: true,
     };
-
-    const ann = await db.collection("announcements").findOne(query, { sort: { createdAt: -1 } });
-    if (!ann) return res.status(404).json({}); // silently ignore when none
+    const ann = await db
+      .collection("announcements")
+      .findOne(query, { sort: { createdAt: -1 } });
+    if (!ann) return res.status(404).json({});
     res.json({
       id: ann._id,
       message: ann.message,
       type: ann.type || "announcement",
-      createdAt: ann.createdAt
+      createdAt: ann.createdAt,
     });
   } catch (e) {
     console.error("Error fetching announcement:", e);
