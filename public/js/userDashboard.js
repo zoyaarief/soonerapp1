@@ -158,8 +158,106 @@ async function renderSection(rowId, typeRaw){
   }
 }
 
+// ---------- Active Queue box ----------
+async function loadActiveQueueBox() {
+  const sec = document.getElementById("activeQueueSection");
+  const box = document.getElementById("activeQueueBox");
+  if (!sec || !box) return;
+
+  try {
+    const q = await fetch("/api/queue/active", { credentials: "include" });
+    if (q.status === 204) { // no active queue
+      sec.style.display = "none";
+      return;
+    }
+    if (!q.ok) throw new Error("Active queue fetch failed");
+    const data = await q.json();
+
+    // Guard for empty payload
+    if (!data || !data.venueId) {
+      sec.style.display = "none";
+      return;
+    }
+
+    sec.style.display = ""; // show
+    box.innerHTML = `
+      <p>You’re in line at <b>${data.venueName || "—"}</b></p>
+      <p>Position: <b>#${data.position ?? "?"}</b> · Party: ${data.people ?? "?"}</p>
+      <p>Approx wait: ${data.approxWaitMins ? data.approxWaitMins + "m" : "—"}</p>
+      <div class="row gap">
+        <button class="btn small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}'">Open place</button>
+        <button class="btn ghost small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}#queue'">Manage</button>
+      </div>
+    `;
+  } catch (e) {
+    // Hide on any error or unauth
+    sec.style.display = "none";
+  }
+}
+
+// ---------- Venues for Today ----------
+async function loadTodayVenues() {
+  const sec = document.getElementById("todayVenuesSection");
+  const row = document.getElementById("todayVenuesRow");
+  if (!sec || !row) return;
+
+  try {
+    // likes: [{ venueId }]
+    // history: [{ venueId, count }]
+    const [likesRes, histRes] = await Promise.allSettled([
+      fetchJSON("/api/likes"),
+      fetchJSON("/api/history")
+    ]);
+
+    const likes = likesRes.status === "fulfilled" ? likesRes.value : [];
+    const history = histRes.status === "fulfilled" ? histRes.value : [];
+
+    // Build ranking keys: favorites get a big boost; then by visit count.
+    const favIds = new Set(likes.map(x => String(x.venueId || x._id || x)));
+    const counts = new Map();
+    history.forEach(h => {
+      const id = String(h.venueId || h._id || h);
+      counts.set(id, (counts.get(id) || 0) + (h.count || 1));
+    });
+
+    // ranked unique ids (limit 5)
+    const ranked = [...new Set([...favIds, ...counts.keys()])]
+      .sort((a,b) => {
+        const sa = (favIds.has(a) ? 100 : 0) + (counts.get(a) || 0);
+        const sb = (favIds.has(b) ? 100 : 0) + (counts.get(b) || 0);
+        return sb - sa;
+      })
+      .slice(0, 5);
+
+    if (!ranked.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    // Fetch public details for each id
+    const details = await Promise.all(
+      ranked.map(id => fetchJSON(`/api/owners/public/${encodeURIComponent(id)}`).catch(() => null))
+    );
+    const items = details.filter(Boolean);
+
+    if (!items.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    // Render
+    row.innerHTML = "";
+    items.forEach(p => row.appendChild(makeCard(p)));
+    sec.style.display = ""; // show
+  } catch (e) {
+    sec.style.display = "none";
+  }
+}
+
 (async function init(){
   await loadLikes();
+  await loadActiveQueueBox();
+  await loadTodayVenues();
   renderSection("restaurantsRow", "restaurant");
   renderSection("salonsRow", "salon");
   renderSection("clinicsRow", "clinic");

@@ -51,6 +51,17 @@
 
     <!-- Curated sections -->
     <main class="feed">
+      <!-- Active Queue (auto-hides) -->
+      <section id="activeQueueSection" class="card" style="display:none">
+        <h2>Active Queue</h2>
+        <div id="activeQueueBox" class="muted">Loading…</div>
+      </section>
+
+      <!-- Venues for Today (auto-hides) -->
+      <section id="todayVenuesSection" class="card" style="display:none">
+        <h2>Venues for Today</h2>
+        <div id="todayVenuesRow" class="scroll-cards"></div>
+      </section>
       <section>
         <h2>Top-Rated Restaurants</h2>
         <div class="scroll-cards" id="restaurantsRow"></div>

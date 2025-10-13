@@ -70,6 +70,9 @@
               <div>
                 <strong id="pos">—</strong><div class="muted">your position</div>
               </div>
+              <div>
+                <strong id="seatsLeft">—</strong><div class="muted">seats left</div>
+              </div>
             </div>
 
             <div id="ctaRow" class="cta-row">
@@ -93,7 +96,10 @@
 
           <!-- Reviews -->
           <article id="reviews" class="card">
-            <div class="card__head"><h2>Ratings & Reviews</h2></div>
+            <div class="card__head">
+              <h2>Ratings & Reviews</h2>
+              <div class="sub">Average ⭐ <span id="avgRating">—</span> (<span id="totalReviews">0</span>)</div>
+            </div>
             <div id="reviewsList" class="reviews"></div>
             <form id="reviewForm" class="review-form">
               <label>Leave a review (enabled after service)</label>
