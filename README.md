@@ -210,4 +210,4 @@ Create an owner via Owner Sign Up in the UI, or insert small sample docs into ow
 
 ## 📜 License
 
-MIT — see `LICENSE`.
+MIT - see `LICENSE`.
