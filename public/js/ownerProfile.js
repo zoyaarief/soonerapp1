@@ -82,15 +82,95 @@ const clearProfileBtn = document.getElementById("clearProfile");
 // In-memory gallery for this page session
 let galleryState = [];
 
-// Helpers
-function readAsDataURL(file) {
+/* ============================================================
+   FAST IMAGE UPLOADS: client-side resize + compress to WebP/JPEG
+   ============================================================ */
+
+// Load an <img> from a File
+function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
     const fr = new FileReader();
-    fr.onload = () => resolve(fr.result);
+    fr.onload = () => {
+      img.src = fr.result;
+    };
     fr.onerror = reject;
     fr.readAsDataURL(file);
   });
 }
+
+// Draw into canvas with max dimensions and export to WebP (fallback JPEG)
+async function compressFileToDataURL(file, { maxW, maxH, quality = 0.8 } = {}) {
+  const img = await loadImageFromFile(file);
+
+  // Compute target size while preserving aspect ratio
+  let { width, height } = img;
+  if (maxW && width > maxW) {
+    const s = maxW / width;
+    width = maxW;
+    height = Math.round(height * s);
+  }
+  if (maxH && height > maxH) {
+    const s = maxH / height;
+    height = maxH;
+    width = Math.round(width * s);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+  ctx.drawImage(img, 0, 0, width, height);
+
+  let out = "";
+  try {
+    out = canvas.toDataURL("image/webp", quality);
+    if (!out || out.length < 20) throw new Error("bad webp");
+  } catch {
+    out = canvas.toDataURL("image/jpeg", quality);
+  }
+  return out;
+}
+
+// Optional: recompress existing base64 (if you already had big images in DB)
+async function compressDataURL(dataURL, { maxW, maxH, quality = 0.8 } = {}) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = async () => {
+      let { width, height } = img;
+      if (maxW && width > maxW) {
+        const s = maxW / width;
+        width = maxW;
+        height = Math.round(height * s);
+      }
+      if (maxH && height > maxH) {
+        const s = maxH / height;
+        height = maxH;
+        width = Math.round(width * s);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", {
+        alpha: false,
+        desynchronized: true,
+      });
+      ctx.drawImage(img, 0, 0, width, height);
+      let out = canvas.toDataURL("image/webp", quality);
+      if (!out || out.length < 20)
+        out = canvas.toDataURL("image/jpeg", quality);
+      resolve(out);
+    };
+    img.onerror = reject;
+    img.src = dataURL;
+  });
+}
+
+/* ==========================
+   Rendering helpers
+   ========================== */
 function renderGallery() {
   galleryGrid.innerHTML = "";
   galleryState.forEach((src, i) => {
@@ -139,21 +219,43 @@ function renderGallery() {
   }
 })();
 
-// Avatar upload (preview only; saved on Submit)
+/* ==========================
+   Upload handlers (compressed)
+   ========================== */
+
+// Avatar upload → shrink to ~320px, WebP/JPEG, q=0.8
 avatarInput?.addEventListener("change", async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
-  const url = await readAsDataURL(f);
-  avatarPreview.src = url;
-  if (chipImg) chipImg.src = url;
+  try {
+    const url = await compressFileToDataURL(f, {
+      maxW: 320,
+      maxH: 320,
+      quality: 0.8,
+    });
+    avatarPreview.src = url;
+    if (chipImg) chipImg.src = url;
+  } catch (err) {
+    console.warn("Avatar compress failed:", err);
+  }
 });
 
-// Multiple images → galleryState
+// Gallery/Menu uploads → each to max 1280px, q=0.8
+const MAX_GALLERY_ITEMS = 20; // adjust if you want
 async function handleMulti(files) {
   if (!files?.length) return;
   for (const f of files) {
-    const url = await readAsDataURL(f);
-    galleryState.push(url);
+    if (galleryState.length >= MAX_GALLERY_ITEMS) break;
+    try {
+      const url = await compressFileToDataURL(f, {
+        maxW: 1280,
+        maxH: 1280,
+        quality: 0.8,
+      });
+      galleryState.push(url);
+    } catch (e) {
+      console.warn("Gallery compress failed:", e);
+    }
   }
   renderGallery();
 }
@@ -168,11 +270,33 @@ galleryGrid?.addEventListener("click", (e) => {
   renderGallery();
 });
 
-// Save → PUT to server
+/* ==========================
+   Save → PUT to server
+   ========================== */
+
+// (Optional) If you already had giant base64s in memory from hydration, shrink them before saving
+async function shrinkExistingGalleryIfNeeded() {
+  const MAX_LEN = 400_000; // ~400 KB per data URL string
+  const out = [];
+  for (const src of galleryState) {
+    if (typeof src === "string" && src.length > MAX_LEN) {
+      out.push(
+        await compressDataURL(src, { maxW: 1280, maxH: 1280, quality: 0.8 })
+      );
+    } else {
+      out.push(src);
+    }
+  }
+  galleryState = out;
+}
+
 form?.addEventListener("submit", async (e) => {
   e.preventDefault();
   msg.textContent = "Saving…";
   msg.style.color = "#6B7280";
+
+  // Optional: ensure any pre-existing large base64s are tamed
+  // await shrinkExistingGalleryIfNeeded();
 
   const payload = {
     displayName: displayName.value.trim(),
@@ -186,8 +310,8 @@ form?.addEventListener("submit", async (e) => {
     openTime: openTime.value.trim(),
     closeTime: closeTime.value.trim(),
     features: features.value.trim(),
-    avatar: avatarPreview.src, // data URL
-    gallery: galleryState, // array of data URLs
+    avatar: avatarPreview.src, // now a small WebP/JPEG data URL
+    gallery: galleryState, // array of small WebP/JPEG data URLs
   };
 
   try {

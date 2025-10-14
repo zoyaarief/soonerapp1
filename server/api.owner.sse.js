@@ -69,8 +69,16 @@ async function loadOrInitSettings(ownerId) {
     queueActive: true,
     updatedAt: new Date(),
   };
-  await Settings.updateOne({ ownerId: base.ownerId }, { $setOnInsert: base }, { upsert: true });
-  await Legacy.updateOne({ ownerId: String(ownerId) }, { $setOnInsert: base }, { upsert: true });
+  await Settings.updateOne(
+    { ownerId: base.ownerId },
+    { $setOnInsert: base },
+    { upsert: true }
+  );
+  await Legacy.updateOne(
+    { ownerId: String(ownerId) },
+    { $setOnInsert: base },
+    { upsert: true }
+  );
   return base;
 }
 
@@ -120,6 +128,7 @@ router.get("/queue/stream", requireOwner, async (req, res) => {
       const settings = await loadOrInitSettings(req.session.ownerId);
 
       sseSend(res, "snapshot", {
+        // queue items in the shape the UI expects
         queue: items.map((x) => ({
           _id: String(x._id),
           name: x.name || "Guest",
@@ -128,11 +137,16 @@ router.get("/queue/stream", requireOwner, async (req, res) => {
           people: x.people || x.partySize || 1,
           position: x.position || x.order || 0,
           status: x.status || "waiting",
+          order: x.order || 0,
         })),
+        // keep both "capacity" and top-level mirrors for the dashboard
         capacity,
+        totalSeats: capacity.totalSeats,
+        seatsUsed: capacity.used,
+        spotsLeft: capacity.left,
         settings: {
           walkinsEnabled: !!settings.walkinsEnabled,
-          openStatus: settings.openStatus,
+          openStatus: settings.openStatus === "open" ? "open" : "closed",
           queueActive: !!settings.queueActive,
         },
       });

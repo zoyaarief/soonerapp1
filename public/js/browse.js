@@ -1,59 +1,90 @@
-
-// browse.js — LIVE filters, toasts, hearts, distance sort (nearby)
+// public/js/browse.js — LIVE filters, toasts, hearts, distance sort (nearby) with pagination + fixed API base
 
 // ============== Helpers ==============
-function qs(sel){ return document.querySelector(sel); }
-function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+function qs(sel) {
+  return document.querySelector(sel);
+}
+function qsa(sel) {
+  return Array.from(document.querySelectorAll(sel));
+}
 
 // Toast
 const toastEl = document.getElementById("toast");
 const toastText = document.getElementById("toastText");
-document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
-function toast(msg){
-  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+document
+  .getElementById("toastClose")
+  ?.addEventListener("click", () => toastEl?.classList.remove("show"));
+function toast(msg) {
+  if (!toastEl || !toastText) {
+    console.log("[toast]", msg);
+    return;
+  }
   toastText.textContent = msg;
   toastEl.classList.add("show");
   clearTimeout(toastEl._t);
-  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
+  toastEl._t = setTimeout(() => toastEl.classList.remove("show"), 2200);
 }
 
-async function fetchJSON(url, opts={}){
-  const r = await fetch(url, { credentials:"include", ...opts });
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, { credentials: "include", ...opts });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
 // Normalize plural/singular
-function normalizeType(t){
-  const map = { restaurants:"restaurant", restaurant:"restaurant",
-                salons:"salon", salon:"salon",
-                clinics:"clinic", clinic:"clinic",
-                events:"event", event:"event",
-                services:"other", other:"other" };
-  return map[(t||"").toLowerCase()] || t;
+function normalizeType(t) {
+  const map = {
+    restaurants: "restaurant",
+    restaurant: "restaurant",
+    salons: "salon",
+    salon: "salon",
+    clinics: "clinic",
+    clinic: "clinic",
+    events: "event",
+    event: "event",
+    services: "other",
+    other: "other",
+  };
+  return map[(t || "").toLowerCase()] || t;
 }
 
 // Likes state
 let likedSet = new Set();
-async function loadLikes(){
+async function loadLikes() {
   try {
-    const likes = await fetchJSON("/api/likes");
-    likedSet = new Set(likes.map(x => String(x.venueId || x.venue_id || x._id)));
-  } catch { likedSet = new Set(); }
+    const likes = await fetchJSON(`${API_BASE}/api/likes`);
+    likedSet = new Set(
+      likes.map((x) => String(x.venueId || x.venue_id || x._id))
+    );
+  } catch {
+    likedSet = new Set();
+  }
 }
-function isLiked(id){ return likedSet.has(String(id)); }
-async function toggleLike(venueId, btn){
-  try{
+function isLiked(id) {
+  return likedSet.has(String(id));
+}
+async function toggleLike(venueId, btn) {
+  try {
     const idStr = String(venueId);
-    if (isLiked(idStr)){
-      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"DELETE", credentials:"include" });
-      likedSet.delete(idStr); btn?.classList.remove("on"); toast("Removed from favorites");
+    if (isLiked(idStr)) {
+      await fetch(`${API_BASE}/api/likes/${encodeURIComponent(idStr)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      likedSet.delete(idStr);
+      btn?.classList.remove("on");
+      toast("Removed from favorites");
     } else {
-      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"POST", credentials:"include" });
-      likedSet.add(idStr); btn?.classList.add("on"); toast("Added to favorites");
+      await fetch(`${API_BASE}/api/likes/${encodeURIComponent(idStr)}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      likedSet.add(idStr);
+      btn?.classList.add("on");
+      toast("Added to favorites");
     }
-  }catch(e){
-    if (e?.message?.includes("Unauthorized") || e?.status === 401){
+  } catch (e) {
+    if (e?.message?.includes("Unauthorized") || e?.status === 401) {
       const ret = encodeURIComponent(location.pathname + location.search);
       location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
       return;
@@ -63,21 +94,29 @@ async function toggleLike(venueId, btn){
 }
 
 // Distance helper
-function getUserCoords(){
-  try{ return JSON.parse(localStorage.getItem("userLocation")||"null"); } catch { return null; }
+function getUserCoords() {
+  try {
+    return JSON.parse(localStorage.getItem("userLocation") || "null");
+  } catch {
+    return null;
+  }
 }
-function km(a, b){
+function km(a, b) {
   if (!a || !b) return Infinity;
-  const R=6371, toRad = d=>d*Math.PI/180;
+  const R = 6371,
+    toRad = (d) => (d * Math.PI) / 180;
   const dLat = toRad(b.latitude - a.latitude);
   const dLon = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude), lat2 = toRad(b.latitude);
-  const hav = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(hav));
+  const lat1 = toRad(a.latitude),
+    lat2 = toRad(b.latitude);
+  const hav =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(hav));
 }
 
 // Build card
-function buildCard(p){
+function buildCard(p) {
   const div = document.createElement("div");
   div.className = "card";
   const liked = isLiked(p._id);
@@ -88,17 +127,21 @@ function buildCard(p){
       <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
       <div class="row">
         <button class="join" data-id="${p._id}">Join Queue</button>
-        <button class="heart ${liked ? "on":""}" aria-label="Favorite" data-like="${p._id}">♥</button>
+        <button class="heart ${liked ? "on" : ""}" aria-label="Favorite" data-like="${p._id}">♥</button>
       </div>
     </div>`;
   div.querySelector(".join")?.addEventListener("click", () => {
     location.href = `place.html?id=${encodeURIComponent(p._id)}`;
   });
   div.querySelector(".heart")?.addEventListener("click", (ev) => {
-    ev.stopPropagation(); toggleLike(p._id, ev.currentTarget);
+    ev.stopPropagation();
+    toggleLike(p._id, ev.currentTarget);
   });
   return div;
 }
+
+// --------- API base (fixed) ---------
+const API_BASE = "http://localhost:3000";
 
 // Load with filters
 async function load() {
@@ -134,17 +177,19 @@ async function load() {
   if (rating) params.set("rating", rating);
   if (cuisine) params.set("cuisine", cuisine);
 
-  // If you're ever opening the page from a different origin (file://, 5500, etc),
-  // use an absolute API base to avoid hitting the wrong host:
-  const API_BASE = window.location.origin; 
+  // Pagination defaults
+  params.set("limit", "24");
+  params.set("page", "1");
+
   const url = `${API_BASE}/api/owners/public?${params.toString()}`;
 
   try {
-    const items = await fetch(url, { credentials: "include" }).then((r) => {
+    const resp = await fetch(url, { credentials: "include" }).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     });
 
+    const items = Array.isArray(resp) ? resp : resp.items || [];
     const grid = document.getElementById("venueGrid");
     grid.innerHTML = "";
     if (!items.length) {
@@ -177,7 +222,7 @@ async function load() {
 
 qs("#apply")?.addEventListener("click", load);
 qs("#clear")?.addEventListener("click", () => {
-  qsa("input, select").forEach(el => (el.value = ""));
+  qsa("input, select").forEach((el) => (el.value = ""));
   load();
 });
 

@@ -2,9 +2,27 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
-import { getDb, getClient } from "./db.js";
+import { getDb } from "./db.js";
 
 const router = express.Router();
+
+// ------------------------ TYPE HELPERS (new) ------------------------
+const asObjectId = (v) => {
+  if (v == null) return null;
+  if (v instanceof ObjectId) return v;
+  const s = String(v);
+  return ObjectId.isValid(s) ? new ObjectId(s) : null;
+};
+const asStringId = (v) => {
+  if (v == null) return "";
+  return v instanceof ObjectId ? v.toHexString() : String(v);
+};
+const asDateOrNull = (d) => (d ? new Date(d) : null);
+const asNum = (v, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+const asStr = (v) => (v == null ? "" : String(v));
 
 // ------------------------ AUTH GUARD ------------------------
 function requireOwner(req, res, next) {
@@ -37,8 +55,16 @@ async function loadOrInitSettings(ownerId) {
     queueActive: true,
     updatedAt: new Date(),
   };
-  await Settings.updateOne({ ownerId: base.ownerId }, { $setOnInsert: base }, { upsert: true });
-  await Legacy.updateOne({ ownerId: String(ownerId) }, { $setOnInsert: base }, { upsert: true });
+  await Settings.updateOne(
+    { ownerId: base.ownerId },
+    { $setOnInsert: base },
+    { upsert: true }
+  );
+  await Legacy.updateOne(
+    { ownerId: String(ownerId) },
+    { $setOnInsert: base },
+    { upsert: true }
+  );
   return base;
 }
 
@@ -48,7 +74,8 @@ async function updateSettings(ownerId, patch) {
   const Legacy = db.collection("settings");
 
   const normalized = {};
-  if ("walkinsEnabled" in patch) normalized.walkinsEnabled = !!patch.walkinsEnabled;
+  if ("walkinsEnabled" in patch)
+    normalized.walkinsEnabled = !!patch.walkinsEnabled;
   if ("queueActive" in patch) normalized.queueActive = !!patch.queueActive;
   if ("openStatus" in patch)
     normalized.openStatus = patch.openStatus === "open" ? "open" : "closed";
@@ -59,7 +86,10 @@ async function updateSettings(ownerId, patch) {
     oid = new ObjectId(String(ownerId));
   } catch {}
 
-  const filters = [oid && { ownerId: oid }, { ownerId: String(ownerId) }].filter(Boolean);
+  const filters = [
+    oid && { ownerId: oid },
+    { ownerId: String(ownerId) },
+  ].filter(Boolean);
   for (const f of filters) {
     await Settings.updateOne(f, { $set: normalized }, { upsert: false });
     await Legacy.updateOne(f, { $set: normalized }, { upsert: false });
@@ -78,7 +108,13 @@ router.post("/owners", async (req, res) => {
     const Owners = db.collection("owners");
     const { manager, business, type, phone, email, password } = req.body || {};
 
-    if (!manager?.trim() || !business?.trim() || !email?.trim() || !password || password.length < 8)
+    if (
+      !manager?.trim() ||
+      !business?.trim() ||
+      !email?.trim() ||
+      !password ||
+      password.length < 8
+    )
       return res.status(400).json({ error: "Invalid payload" });
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -99,11 +135,16 @@ router.post("/owners", async (req, res) => {
       req.session.ownerId = String(result.insertedId);
       req.session.business = doc.business;
       req.session.save(() =>
-        res.status(201).json({ ok: true, ownerId: result.insertedId, business: doc.business })
+        res.status(201).json({
+          ok: true,
+          ownerId: result.insertedId,
+          business: doc.business,
+        })
       );
     });
   } catch (err) {
-    if (err?.code === 11000) return res.status(409).json({ error: "Email already exists" });
+    if (err?.code === 11000)
+      return res.status(409).json({ error: "Email already exists" });
     console.error("Create owner error:", err);
     res.status(500).json({ error: "Server error" });
   }
@@ -112,10 +153,13 @@ router.post("/owners", async (req, res) => {
 router.post("/owners/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    if (!email?.trim() || !password) return res.status(400).json({ error: "Missing credentials" });
+    if (!email?.trim() || !password)
+      return res.status(400).json({ error: "Missing credentials" });
 
     const db = getDb();
-    const owner = await db.collection("owners").findOne({ email: email.trim().toLowerCase() });
+    const owner = await db
+      .collection("owners")
+      .findOne({ email: email.trim().toLowerCase() });
     if (!owner) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = await bcrypt.compare(password, owner.passwordHash || "");
@@ -126,7 +170,6 @@ router.post("/owners/login", async (req, res) => {
       req.session.ownerId = String(owner._id);
       req.session.business = owner.business;
       console.log("✅ Owner logged in:", owner.email);
-      console.log("Session right before save:", req.sessionID, req.session);
       req.session.save(() => res.json({ ok: true, business: owner.business }));
     });
   } catch (e) {
@@ -156,10 +199,12 @@ router.post("/owners/logout", (req, res) => {
 router.get("/owners/me", requireOwner, async (req, res) => {
   try {
     const db = getDb();
-    const owner = await db.collection("owners").findOne(
-      { _id: new ObjectId(req.session.ownerId) },
-      { projection: { passwordHash: 0 } }
-    );
+    const owner = await db
+      .collection("owners")
+      .findOne(
+        { _id: new ObjectId(req.session.ownerId) },
+        { projection: { passwordHash: 0 } }
+      );
     if (!owner) return res.status(404).json({ error: "Owner not found" });
     res.json({ ok: true, ...owner, ownerId: String(owner._id) });
   } catch (e) {
@@ -251,13 +296,23 @@ router.put("/settings", requireOwner, async (req, res) => {
 router.get("/announcements", requireOwner, async (req, res) => {
   try {
     const db = getDb();
-    const items = await db
+    const raw = await db
       .collection("announcements")
       .find({
-        $or: [{ ownerId: String(req.session.ownerId) }, { venueId: String(req.session.ownerId) }],
+        $or: [
+          { ownerId: String(req.session.ownerId) },
+          { venueId: String(req.session.ownerId) },
+        ],
       })
       .sort({ createdAt: -1 })
       .toArray();
+
+    const items = raw.map((x) => ({
+      _id: String(x._id),
+      text: x.message ?? "",
+      type: x.type || "announcement",
+      createdAt: x.createdAt,
+    }));
 
     res.json({ ok: true, items });
   } catch (e) {
@@ -272,15 +327,18 @@ router.post("/announcements", requireOwner, async (req, res) => {
 
     const db = getDb();
     const doc = {
+      ownerId: String(req.session.ownerId),
       venueId: new ObjectId(req.session.ownerId),
       message: text.trim(),
       type: "announcement",
+      visible: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     const r = await db.collection("announcements").insertOne(doc);
     res.status(201).json({ ok: true, id: String(r.insertedId) });
   } catch (e) {
+    console.error("POST /announcements", e);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -292,7 +350,7 @@ router.delete("/announcements/:id", requireOwner, async (req, res) => {
       _id: new ObjectId(req.params.id),
       $or: [
         { ownerId: String(req.session.ownerId) },
-        { venueId: String(req.session.ownerId) },
+        { venueId: new ObjectId(req.session.ownerId) },
       ],
     });
     res.json({ ok: true });
@@ -322,25 +380,271 @@ router.get("/queue", requireOwner, async (req, res) => {
   try {
     const db = getDb();
     const Queue = db.collection("queue");
+    const Settings = db.collection("owner_settings");
+    const Owners = db.collection("owners");
+
     const filter = await buildQueueFilterForOwner(req);
-    const list = await Queue.find(filter).sort({ order: 1 }).toArray();
-    res.json({ ok: true, queue: list });
+    const list = await Queue.find(filter)
+      .sort({ position: 1, joinedAt: 1 })
+      .toArray();
+
+    const owner = await Owners.findOne(
+      { _id: new ObjectId(req.session.ownerId) },
+      { projection: { "profile.totalSeats": 1 } }
+    );
+    const totalSeats = Number(owner?.profile?.totalSeats || 0);
+
+    let used = 0;
+    for (const it of list) {
+      const size = Number(it.people || it.partySize || 0);
+      if (totalSeats > 0 && used + size > totalSeats) break;
+      used += size;
+    }
+    const spotsLeft = totalSeats ? Math.max(totalSeats - used, 0) : Infinity;
+
+    const s = (await Settings.findOne({
+      ownerId: new ObjectId(req.session.ownerId),
+    })) ||
+      (await Settings.findOne({ ownerId: String(req.session.ownerId) })) || {
+        walkinsEnabled: false,
+        openStatus: "closed",
+        queueActive: true,
+      };
+
+    res.json({
+      ok: true,
+      queue: list.map((x) => ({
+        _id: String(x._id),
+        name: x.name || "Guest",
+        email: x.email || "",
+        phone: x.phone || "",
+        people: x.people || x.partySize || 1,
+        position: x.position || x.order || 0,
+        status: x.status || "waiting",
+      })),
+      totalSeats,
+      seatsUsed: used,
+      spotsLeft,
+      settings: {
+        walkinsEnabled: !!s.walkinsEnabled,
+        openStatus: s.openStatus === "open" ? "open" : "closed",
+        queueActive: !!s.queueActive,
+      },
+    });
   } catch (e) {
+    console.error("GET /api/queue error:", e);
     res.status(500).json({ error: "Server error" });
   }
 });
 
+// ------------------------ Mark served → move to queue_pending (Undo window) ------------------------
 router.post("/queue/serve", requireOwner, async (req, res) => {
   try {
-    const { id } = req.body || {};
     const db = getDb();
     const Queue = db.collection("queue");
-    const filter = await buildQueueFilterForOwner(req);
-    const doc = await Queue.findOne({ _id: new ObjectId(id), ...filter });
+    const Pending = db.collection("queue_pending");
+
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: "Missing id" });
+
+    const ownerFilter = await buildQueueFilterForOwner(req);
+    const doc = await Queue.findOne({
+      _id: new ObjectId(String(id)),
+      ...ownerFilter,
+    });
     if (!doc) return res.status(404).json({ error: "Not found" });
-    await Queue.updateOne({ _id: doc._id }, { $set: { status: "served" } });
-    res.json({ ok: true });
+
+    const now = new Date();
+    const people = asNum(doc.people ?? doc.partySize, 1);
+    const order = asNum(doc.order ?? doc.position, 0);
+    const position = asNum(doc.position ?? doc.order, order);
+
+    const pendingForSet = {
+      ownerId: asStringId(req.session.ownerId),
+
+      // IMPORTANT: keep userId as ObjectId if schema requires it later
+      userId: asObjectId(doc.userId) ?? null,
+
+      // Your queue sample shows strings for venueId/restaurantId
+      venueId: asStringId(doc.venueId ?? req.session.ownerId),
+      restaurantId: asStringId(
+        doc.restaurantId ?? doc.venueId ?? req.session.ownerId
+      ),
+
+      name: asStr(doc.name || "Guest"),
+      email: asStr(doc.email || ""),
+      phone: asStr(doc.phone || ""),
+
+      people,
+      partySize: people,
+      order,
+      position,
+
+      status: "waiting",
+      servedAt: now,
+      joinedAt: doc.joinedAt ? new Date(doc.joinedAt) : now,
+      updatedAt: now,
+      expireAt: new Date(now.getTime() + 5 * 60 * 1000),
+      timerPaused: !!doc.timerPaused,
+
+      nearTurnAt: asDateOrNull(doc.nearTurnAt),
+      arrivalDeadline: asDateOrNull(doc.arrivalDeadline),
+    };
+
+    const createdAtValue = doc.createdAt ? new Date(doc.createdAt) : now;
+
+    await Pending.updateOne(
+      { _id: new ObjectId(String(doc._id)) },
+      { $set: pendingForSet, $setOnInsert: { createdAt: createdAtValue } },
+      { upsert: true }
+    );
+
+    await Queue.deleteOne({ _id: doc._id });
+
+    res.json({
+      ok: true,
+      removed: {
+        _id: String(doc._id),
+        name: pendingForSet.name,
+        email: pendingForSet.email,
+        phone: pendingForSet.phone,
+        people: pendingForSet.people,
+        position: pendingForSet.position,
+        order: pendingForSet.order,
+        venueId: pendingForSet.venueId,
+        restaurantId: pendingForSet.restaurantId,
+        status: "served",
+      },
+    });
   } catch (e) {
+    console.error("POST /api/queue/serve", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Undo (restore from queue_pending back to queue)
+router.post("/queue/restore", requireOwner, async (req, res) => {
+  try {
+    const db = getDb();
+    const Queue = db.collection("queue");
+    const Pending = db.collection("queue_pending");
+    const Activity = db.collection("activitylog");
+
+    const payload = req.body?.item || {};
+    if (!payload?._id) {
+      return res.status(400).json({ error: "Missing item._id" });
+    }
+    const _id = new ObjectId(String(payload._id));
+
+    // 1) fetch canonical pending
+    const pend = await Pending.findOne({ _id });
+    if (!pend) return res.status(404).json({ error: "Undo window expired" });
+
+    // --- helpers ---
+    const isHex24 = (s) => typeof s === "string" && /^[0-9a-fA-F]{24}$/.test(s);
+    const asIntMin1 = (v, d = 1) => {
+      const n = Math.floor(Number(v));
+      return Number.isFinite(n) && n >= 1 ? n : d;
+    };
+    const toDateOrOmit = (d) => (d ? new Date(d) : undefined);
+    const validEmail = (s) =>
+      typeof s === "string" &&
+      // tiny permissive pattern; your schema may be stricter but this avoids obvious fails
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    const validPhone = (s) =>
+      typeof s === "string" &&
+      // accept +, digits, spaces, dashes, parens with 7+ digits total
+      s.replace(/[^\d]/g, "").length >= 7;
+
+    // 2) Build a strict, whitelisted doc (avoid additionalProperties)
+    const venueIdStr = isHex24(pend.venueId)
+      ? pend.venueId
+      : pend.venueId instanceof ObjectId
+        ? pend.venueId.toHexString()
+        : "";
+    const restaurantIdStr = isHex24(pend.restaurantId)
+      ? pend.restaurantId
+      : pend.restaurantId instanceof ObjectId
+        ? pend.restaurantId.toHexString()
+        : venueIdStr;
+
+    const people = asIntMin1(pend.people ?? pend.partySize ?? 1);
+    const order = asIntMin1(pend.order ?? pend.position ?? 1);
+    const position = asIntMin1(pend.position ?? pend.order ?? order);
+
+    const doc = {
+      _id, // keep the same id
+      userId: pend.userId, // expect ObjectId; do not coerce to string
+      venueId: venueIdStr, // schema likely wants 24-hex string
+      restaurantId: restaurantIdStr, // same
+      name:
+        typeof pend.name === "string" && pend.name.trim()
+          ? pend.name.trim()
+          : "Guest",
+      people,
+      order,
+      position,
+      status: "waiting",
+      timerPaused: !!pend.timerPaused,
+      joinedAt: new Date(pend.joinedAt || new Date()),
+      createdAt: new Date(pend.createdAt || new Date()),
+      updatedAt: new Date(),
+    };
+
+    // Optional dates: include only if present (no nulls)
+    const nearTurnAt = toDateOrOmit(pend.nearTurnAt);
+    const arrivalDeadline = toDateOrOmit(pend.arrivalDeadline);
+    if (nearTurnAt) doc.nearTurnAt = nearTurnAt;
+    if (arrivalDeadline) doc.arrivalDeadline = arrivalDeadline;
+
+    // Optional patterned strings: include only if valid
+    if (validEmail(pend.email)) doc.email = pend.email.trim();
+    if (validPhone(pend.phone)) doc.phone = pend.phone.trim();
+
+    // 3) Required field guardrails
+    if (!(doc.userId instanceof ObjectId)) {
+      return res
+        .status(400)
+        .json({ error: "Cannot restore: userId must be an ObjectId" });
+    }
+    if (!isHex24(doc.venueId) || !isHex24(doc.restaurantId)) {
+      return res
+        .status(400)
+        .json({
+          error: "Cannot restore: venueId/restaurantId must be 24-hex strings",
+        });
+    }
+
+    // 4) Insert & cleanup
+    await Queue.insertOne(doc);
+    await Pending.deleteOne({ _id });
+
+    // 5) best-effort activity
+    try {
+      await Activity.insertOne({
+        actorId: String(req.session.ownerId),
+        action: "queue.restore",
+        entityType: "queue",
+        entityId: _id,
+        at: new Date(),
+      });
+    } catch (logErr) {
+      console.warn(
+        "activitylog insert skipped:",
+        logErr?.errInfo || logErr?.message || logErr
+      );
+    }
+
+    res.json({ ok: true, restored: String(_id) });
+  } catch (e) {
+    // Print exact $jsonSchema reasons so we can iterate if anything else mismatches
+    if (e?.errInfo?.details) {
+      console.error(
+        "QUEUE RESTORE VALIDATION DETAILS:\n" +
+          JSON.stringify(e.errInfo.details, null, 2)
+      );
+    }
+    console.error("POST /api/queue/restore", e);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -353,8 +657,12 @@ router.post("/public/queue", async (req, res) => {
     if (!ownerId) return res.status(400).json({ error: "Missing ownerId" });
     const count = Math.max(1, Math.min(12, Number(partySize) || 1));
     const doc = {
-      venueId: ObjectId.isValid(ownerId) ? new ObjectId(ownerId) : String(ownerId),
-      restaurantId: ObjectId.isValid(ownerId) ? new ObjectId(ownerId) : String(ownerId),
+      venueId: ObjectId.isValid(ownerId)
+        ? new ObjectId(ownerId)
+        : String(ownerId),
+      restaurantId: ObjectId.isValid(ownerId)
+        ? new ObjectId(ownerId)
+        : String(ownerId),
       name: name?.trim() || "Guest",
       email: email?.trim() || "",
       phone: phone?.trim() || "",

@@ -1,30 +1,41 @@
-
-// userDashboard.js — LIVE data + hearts + announcements + graceful fallbacks
+// public/js/userDashboard.js — LIVE data + hearts + announcements + graceful fallbacks, with fixed API base + pagination
 
 // ============== Helpers ==============
-function qs(sel){ return document.querySelector(sel); }
-function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
+function qs(sel) {
+  return document.querySelector(sel);
+}
+function qsa(sel) {
+  return Array.from(document.querySelectorAll(sel));
+}
+
+const API_BASE = "http://localhost:3000";
 
 // Toast (optional UI)
 const toastEl = document.getElementById("toast");
 const toastText = document.getElementById("toastText");
-document.getElementById("toastClose")?.addEventListener("click", () => toastEl?.classList.remove("show"));
-function toast(msg){
-  if (!toastEl || !toastText) { console.log("[toast]", msg); return; }
+document
+  .getElementById("toastClose")
+  ?.addEventListener("click", () => toastEl?.classList.remove("show"));
+function toast(msg) {
+  if (!toastEl || !toastText) {
+    console.log("[toast]", msg);
+    return;
+  }
   toastText.textContent = msg;
   toastEl.classList.add("show");
   clearTimeout(toastEl._t);
-  toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 2200);
+  toastEl._t = setTimeout(() => toastEl.classList.remove("show"), 2200);
 }
 
-async function fetchJSON(url, opts={}){
+async function fetchJSON(url, opts = {}) {
   const r = await fetch(url, { credentials: "include", ...opts });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
 const greetNameEl = document.getElementById("greetName");
-if (greetNameEl) greetNameEl.textContent = localStorage.getItem("customerName") || "Customer";
+if (greetNameEl)
+  greetNameEl.textContent = localStorage.getItem("customerName") || "Customer";
 
 // ====== Category buttons → Browse page ======
 document.querySelectorAll(".categories button").forEach((btn) => {
@@ -35,17 +46,25 @@ document.querySelectorAll(".categories button").forEach((btn) => {
 });
 
 // Normalize plural/singular category names
-function normalizeType(t){
-  const map = { restaurants:"restaurant", restaurant:"restaurant",
-                salons:"salon", salon:"salon",
-                clinics:"clinic", clinic:"clinic",
-                events:"event", event:"event",
-                services:"other", service:"other", other:"other" };
-  return map[(t||"").toLowerCase()] || t;
+function normalizeType(t) {
+  const map = {
+    restaurants: "restaurant",
+    restaurant: "restaurant",
+    salons: "salon",
+    salon: "salon",
+    clinics: "clinic",
+    clinic: "clinic",
+    events: "event",
+    event: "event",
+    services: "other",
+    service: "other",
+    other: "other",
+  };
+  return map[(t || "").toLowerCase()] || t;
 }
 
 // Category buttons → browse
-qsa(".categories button").forEach(btn => {
+qsa(".categories button").forEach((btn) => {
   btn.addEventListener("click", () => {
     const raw = btn.getAttribute("data-type");
     const type = normalizeType(raw);
@@ -59,47 +78,59 @@ document.getElementById("exploreBtn")?.addEventListener("click", () => {
 });
 
 // Announcements banner
-fetchJSON("/api/announcements/active")
-  .then(items => {
+fetchJSON(`${API_BASE}/api/announcements/active`)
+  .then((items) => {
     if (!items?.length) return;
     const b = document.querySelector(".banner .text");
     if (!b) return;
     const first = items[0];
     b.innerHTML = `<h2>${first.type === "offer" ? "🎁 Offer" : "📢 Announcement"}</h2><p>${first.message}</p>`;
   })
-  .catch(()=>{});
+  .catch(() => {});
 
 // Favorites (likes) — preload to render hearts
 let likedSet = new Set();
-async function loadLikes(){
+async function loadLikes() {
   try {
-    const likes = await fetchJSON("/api/likes");
-    likedSet = new Set(likes.map(x => String(x.venueId || x.venue_id || x._id)));
-  } catch(e){ likedSet = new Set(); }
+    const likes = await fetchJSON(`${API_BASE}/api/likes`);
+    likedSet = new Set(
+      likes.map((x) => String(x.venueId || x.venue_id || x._id))
+    );
+  } catch (e) {
+    likedSet = new Set();
+  }
 }
-function isLiked(id){ return likedSet.has(String(id)); }
+function isLiked(id) {
+  return likedSet.has(String(id));
+}
 
-function heartButtonHTML(id){
+function heartButtonHTML(id) {
   const on = isLiked(id) ? "on" : "off";
   return `<button class="heart ${on}" aria-label="Favorite" data-like="${id}">♥</button>`;
 }
 
-async function toggleLike(venueId, btn){
-  try{
+async function toggleLike(venueId, btn) {
+  try {
     const idStr = String(venueId);
-    if (isLiked(idStr)){
-      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"DELETE", credentials:"include" });
+    if (isLiked(idStr)) {
+      await fetch(`${API_BASE}/api/likes/${encodeURIComponent(idStr)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
       likedSet.delete(idStr);
       btn?.classList.remove("on");
       toast("Removed from favorites");
     } else {
-      await fetch(`/api/likes/${encodeURIComponent(idStr)}`, { method:"POST", credentials:"include" });
+      await fetch(`${API_BASE}/api/likes/${encodeURIComponent(idStr)}`, {
+        method: "POST",
+        credentials: "include",
+      });
       likedSet.add(idStr);
       btn?.classList.add("on");
       toast("Added to favorites");
     }
-  }catch(e){
-    if (e?.message?.includes("Unauthorized") || e?.status === 401){
+  } catch (e) {
+    if (e?.message?.includes("Unauthorized") || e?.status === 401) {
       const ret = encodeURIComponent(location.pathname + location.search);
       location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
       return;
@@ -109,12 +140,12 @@ async function toggleLike(venueId, btn){
 }
 
 // Card factory
-function makeCard(p){
+function makeCard(p) {
   const div = document.createElement("div");
   div.className = "card";
   div.innerHTML = `
     <div class="card-media">
-      <img src="${p.heroImage || p.image || './images/restaurant.jpg'}" alt="${p.name}">
+      <img src="${p.heroImage || p.image || "./images/restaurant.jpg"}" alt="${p.name}">
       <div class="card-actions">
         ${heartButtonHTML(p._id)}
       </div>
@@ -135,24 +166,24 @@ function makeCard(p){
 }
 
 // Render rows
-async function renderSection(rowId, typeRaw){
+async function renderSection(rowId, typeRaw) {
   const type = normalizeType(typeRaw);
   const row = document.getElementById(rowId);
   if (!row) return;
   row.innerHTML = "<div class='muted'>Loading…</div>";
 
   try {
-    const list = await fetchJSON(`/api/owners/public?type=${encodeURIComponent(type)}`);
-
-    // sort by rating (desc), then slice top 5
+    const listResp = await fetchJSON(
+      `${API_BASE}/api/owners/public?type=${encodeURIComponent(type)}&limit=12&page=1`
+    );
+    const list = listResp.items || [];
     const sorted = list
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 5);
 
     row.innerHTML = "";
-    sorted.forEach(p => row.appendChild(makeCard(p)));
-
-  } catch(e) {
+    sorted.forEach((p) => row.appendChild(makeCard(p)));
+  } catch (e) {
     console.error("renderSection error", e);
     row.innerHTML = "<div class='muted'>Failed to load.</div>";
   }
@@ -166,7 +197,8 @@ async function loadActiveQueueBox() {
 
   try {
     const q = await fetch("/api/queue/active", { credentials: "include" });
-    if (q.status === 204) { // no active queue
+    if (q.status === 204) {
+      // no active queue
       sec.style.display = "none";
       return;
     }
@@ -206,23 +238,23 @@ async function loadTodayVenues() {
     // history: [{ venueId, count }]
     const [likesRes, histRes] = await Promise.allSettled([
       fetchJSON("/api/likes"),
-      fetchJSON("/api/history")
+      fetchJSON("/api/history"),
     ]);
 
     const likes = likesRes.status === "fulfilled" ? likesRes.value : [];
     const history = histRes.status === "fulfilled" ? histRes.value : [];
 
     // Build ranking keys: favorites get a big boost; then by visit count.
-    const favIds = new Set(likes.map(x => String(x.venueId || x._id || x)));
+    const favIds = new Set(likes.map((x) => String(x.venueId || x._id || x)));
     const counts = new Map();
-    history.forEach(h => {
+    history.forEach((h) => {
       const id = String(h.venueId || h._id || h);
       counts.set(id, (counts.get(id) || 0) + (h.count || 1));
     });
 
     // ranked unique ids (limit 5)
     const ranked = [...new Set([...favIds, ...counts.keys()])]
-      .sort((a,b) => {
+      .sort((a, b) => {
         const sa = (favIds.has(a) ? 100 : 0) + (counts.get(a) || 0);
         const sb = (favIds.has(b) ? 100 : 0) + (counts.get(b) || 0);
         return sb - sa;
@@ -236,7 +268,11 @@ async function loadTodayVenues() {
 
     // Fetch public details for each id
     const details = await Promise.all(
-      ranked.map(id => fetchJSON(`/api/owners/public/${encodeURIComponent(id)}`).catch(() => null))
+      ranked.map((id) =>
+        fetchJSON(`/api/owners/public/${encodeURIComponent(id)}`).catch(
+          () => null
+        )
+      )
     );
     const items = details.filter(Boolean);
 
@@ -247,14 +283,115 @@ async function loadTodayVenues() {
 
     // Render
     row.innerHTML = "";
-    items.forEach(p => row.appendChild(makeCard(p)));
+    items.forEach((p) => row.appendChild(makeCard(p)));
     sec.style.display = ""; // show
   } catch (e) {
     sec.style.display = "none";
   }
 }
 
-(async function init(){
+// ---------- Active Queue box ----------
+async function loadActiveQueueBox() {
+  const sec = document.getElementById("activeQueueSection");
+  const box = document.getElementById("activeQueueBox");
+  if (!sec || !box) return;
+
+  try {
+    const q = await fetch("/api/queue/active", { credentials: "include" });
+    if (q.status === 204) {
+      // no active queue
+      sec.style.display = "none";
+      return;
+    }
+    if (!q.ok) throw new Error("Active queue fetch failed");
+    const data = await q.json();
+
+    // Guard for empty payload
+    if (!data || !data.venueId) {
+      sec.style.display = "none";
+      return;
+    }
+
+    sec.style.display = ""; // show
+    box.innerHTML = `
+      <p>You’re in line at <b>${data.venueName || "—"}</b></p>
+      <p>Position: <b>#${data.position ?? "?"}</b> · Party: ${data.people ?? "?"}</p>
+      <p>Approx wait: ${data.approxWaitMins ? data.approxWaitMins + "m" : "—"}</p>
+      <div class="row gap">
+        <button class="btn small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}'">Open place</button>
+        <button class="btn ghost small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}#queue'">Manage</button>
+      </div>
+    `;
+  } catch (e) {
+    // Hide on any error or unauth
+    sec.style.display = "none";
+  }
+}
+
+// ---------- Venues for Today ----------
+async function loadTodayVenues() {
+  const sec = document.getElementById("todayVenuesSection");
+  const row = document.getElementById("todayVenuesRow");
+  if (!sec || !row) return;
+
+  try {
+    // likes: [{ venueId }]
+    // history: [{ venueId, count }]
+    const [likesRes, histRes] = await Promise.allSettled([
+      fetchJSON("/api/likes"),
+      fetchJSON("/api/history"),
+    ]);
+
+    const likes = likesRes.status === "fulfilled" ? likesRes.value : [];
+    const history = histRes.status === "fulfilled" ? histRes.value : [];
+
+    // Build ranking keys: favorites get a big boost; then by visit count.
+    const favIds = new Set(likes.map((x) => String(x.venueId || x._id || x)));
+    const counts = new Map();
+    history.forEach((h) => {
+      const id = String(h.venueId || h._id || h);
+      counts.set(id, (counts.get(id) || 0) + (h.count || 1));
+    });
+
+    // ranked unique ids (limit 5)
+    const ranked = [...new Set([...favIds, ...counts.keys()])]
+      .sort((a, b) => {
+        const sa = (favIds.has(a) ? 100 : 0) + (counts.get(a) || 0);
+        const sb = (favIds.has(b) ? 100 : 0) + (counts.get(b) || 0);
+        return sb - sa;
+      })
+      .slice(0, 5);
+
+    if (!ranked.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    // Fetch public details for each id
+    const details = await Promise.all(
+      ranked.map((id) =>
+        fetchJSON(`/api/owners/public/${encodeURIComponent(id)}`).catch(
+          () => null
+        )
+      )
+    );
+    const items = details.filter(Boolean);
+
+    if (!items.length) {
+      sec.style.display = "none";
+      return;
+    }
+
+    // Render
+    row.innerHTML = "";
+    items.forEach((p) => row.appendChild(makeCard(p)));
+    sec.style.display = ""; // show
+  } catch (e) {
+    sec.style.display = "none";
+  }
+}
+
+(async function init() {
   await loadLikes();
   await loadActiveQueueBox();
   await loadTodayVenues();
@@ -269,11 +406,11 @@ document.getElementById("avatar")?.addEventListener("click", () => {
   window.location.href = "userProfile.html";
 });
 
-(async function loadAvatar(){
+(async function loadAvatar() {
   try {
-    const me = await fetchJSON("/api/customers/me");
+    const me = await fetchJSON(`${API_BASE}/api/customers/me`);
     const img = document.getElementById("profilePic");
-    if (me.avatar) img.src = me.avatar;
+    if (me.avatar && img) img.src = me.avatar;
   } catch {}
 })();
 
@@ -282,7 +419,10 @@ const logoutBtn = document.getElementById("logoutBtn");
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
     try {
-      await fetch("/api/logout", { method: "POST", credentials: "include" });
+      await fetch(`${API_BASE}/api/customers/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
     } catch (err) {
       console.error("Logout failed", err);
     } finally {
@@ -293,10 +433,21 @@ if (logoutBtn) {
 }
 
 // Geolocation label (optional)
-if (navigator.geolocation){
+if (navigator.geolocation) {
   navigator.geolocation.getCurrentPosition(
-    (pos)=>{ localStorage.setItem("userLocation", JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })); qs("#userCity") && (qs("#userCity").textContent = "your location"); },
-    ()=>{ qs("#userCity") && (qs("#userCity").textContent = "Boston"); }
+    (pos) => {
+      localStorage.setItem(
+        "userLocation",
+        JSON.stringify({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        })
+      );
+      qs("#userCity") && (qs("#userCity").textContent = "your location");
+    },
+    () => {
+      qs("#userCity") && (qs("#userCity").textContent = "Boston");
+    }
   );
 } else {
   qs("#userCity") && (qs("#userCity").textContent = "Boston");
