@@ -1052,6 +1052,18 @@ async function enqueue(req, res) {
       : String(b.venueId || "").trim();
     if (!venueId) return res.status(400).json({ error: "venueId is required" });
 
+    const existing = await db.collection("queue").findOne({
+      venueId,
+      $or: [
+        { userId: b.userId },
+        { customerId: b.userId }, // handle both cases
+      ],
+      status: "active",
+    });
+    if (existing) {
+      return res.status(200).json({ ok: true, message: "Already in queue" });
+    }
+
     const userId = ObjectId.isValid(b.userId)
       ? new ObjectId(b.userId)
       : b.userId
@@ -1064,7 +1076,8 @@ async function enqueue(req, res) {
 
     const doc = {
       venueId,
-      userId, // optional
+      userId, //optional
+      customerId: userId, 
       name: String(b.name || ""),
       email: String(b.email || ""),
       phone: b.phone ? String(b.phone) : undefined,
