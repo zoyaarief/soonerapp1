@@ -8,7 +8,35 @@ function text(el, val) {
   if (el) el.textContent = val ?? "—";
 }
 
+// ---- ID & HTML escaping helpers (add) ----
+function getId(val) {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object") {
+    if (val.$oid) return String(val.$oid);
+    if (val._id) return getId(val._id);
+    if (typeof val.toString === "function") return String(val.toString());
+  }
+  try {
+    return String(val);
+  } catch {
+    return "";
+  }
+}
+function escHtml(s = "") {
+  return String(s).replace(
+    /[&<>"']/g,
+    (m) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        m
+      ]
+  );
+}
+const escAttr = escHtml;
+
 let editingReviewId = null; // keeps track if user is editing
+let reviewsListBound = false; // ensures we attach one click handler only
+
 const usp = new URLSearchParams(location.search);
 const currentId = usp.get("id");
 
@@ -189,121 +217,119 @@ async function loadAnnouncements() {
   }
 }
 
-async function loadReviews() {
-  const avgEl = qs("#avgRating"),
-    totalEl = qs("#totalReviews"),
-    list = qs("#reviewsList");
+// async function loadReviews() {
+//   const avgEl = qs("#avgRating"),
+//     totalEl = qs("#totalReviews"),
+//     list = qs("#reviewsList");
 
-  try {
-    // fetch all reviews for this venue
-    const r = await fetchJSON(`/api/reviews/${encodeURIComponent(currentId)}`);
+//   try {
+//     // fetch all reviews for this venue
+//     const r = await fetchJSON(`/api/reviews/${encodeURIComponent(currentId)}`);
 
-    // if backend returned an array with reviews
-    if (Array.isArray(r) && r.length > 0) {
-      // compute average + total
-      const avg =
-        r.reduce((sum, x) => sum + (Number(x.rating) || 0), 0) / r.length;
+//     // if backend returned an array with reviews
+//     if (Array.isArray(r) && r.length > 0) {
+//       // compute average + total
+//       const avg =
+//         r.reduce((sum, x) => sum + (Number(x.rating) || 0), 0) / r.length;
 
-      if (avgEl) avgEl.textContent = avg.toFixed(1);
-      if (totalEl) totalEl.textContent = r.length;
+//       if (avgEl) avgEl.textContent = avg.toFixed(1);
+//       if (totalEl) totalEl.textContent = r.length;
 
-      // render all reviews with edit button for owner
-      if (list)
-        list.innerHTML = r
-          .map((x) => {
-            const myId = localStorage.getItem("customerId");
-            const isMine = String(x.userId) === String(myId);
+//       // render all reviews with edit button for owner
+//       if (list)
+//         list.innerHTML = r
+//           .map((x) => {
+//             const myId = localStorage.getItem("customerId");
+//             const isMine = String(x.userId) === String(myId);
 
-            return `
-            <div class="review">
-              <div class="row">
-                <div class="star">⭐ ${
-                  x.rating?.toFixed ? x.rating.toFixed(1) : x.rating
-                }</div>
-                <div class="by">${x.name || "Anonymous"}</div>
-                <div class="at">${
-                  x.createdAt
-                    ? new Date(x.createdAt).toLocaleString()
-                    : ""
-                }</div>
-              </div>
-              <p>${(x.comments || "")
-                .replace(/</g, "&lt;")
-                .replace(/\n/g, "<br>")}</p>
-                ${
-                  isMine
-                    ? `
-                      <div class="review-actions">
-                        <button class="btn small" data-edit="${x._id}" data-rate="${x.rating}" data-text="${x.comments || ""}">Edit</button>
-                        <button class="btn small danger" data-delete="${x._id}">Delete</button>
-                      </div>
-                    `
-                    : ""
-                }
-            </div>`;
-          })
-          .join("");
+//             return `
+//             <div class="review">
+//               <div class="row">
+//                 <div class="star">⭐ ${
+//                   x.rating?.toFixed ? x.rating.toFixed(1) : x.rating
+//                 }</div>
+//                 <div class="by">${x.name || "Anonymous"}</div>
+//                 <div class="at">${
+//                   x.createdAt ? new Date(x.createdAt).toLocaleString() : ""
+//                 }</div>
+//               </div>
+//               <p>${(x.comments || "")
+//                 .replace(/</g, "&lt;")
+//                 .replace(/\n/g, "<br>")}</p>
+//                 ${
+//                   isMine
+//                     ? `
+//                       <div class="review-actions">
+//                         <button class="btn small" data-edit="${x._id}" data-rate="${x.rating}" data-text="${x.comments || ""}">Edit</button>
+//                         <button class="btn small danger" data-delete="${x._id}">Delete</button>
+//                       </div>
+//                     `
+//                     : ""
+//                 }
+//             </div>`;
+//           })
+//           .join("");
 
-          // handle edit button clicks
-          list.addEventListener("click", async (e) => {
-            const btn = e.target;
+//       // handle edit button clicks
+//       list.addEventListener("click", async (e) => {
+//         const btn = e.target;
 
-            // edit
-            if (btn.matches("[data-edit]")) {
-              editingReviewId = btn.dataset.edit;
-              const textEl = document.getElementById("revText");
-              const ratingEl = document.getElementById("revRating");
-              textEl.value = btn.dataset.text || "";
-              ratingEl.value = btn.dataset.rate || 5;
-              textEl.focus();
-              toast("Editing your review — update and press Post!");
-              return;
-            }
+//         // edit
+//         if (btn.matches("[data-edit]")) {
+//           editingReviewId = btn.dataset.edit;
+//           const textEl = document.getElementById("revText");
+//           const ratingEl = document.getElementById("revRating");
+//           textEl.value = btn.dataset.text || "";
+//           ratingEl.value = btn.dataset.rate || 5;
+//           textEl.focus();
+//           toast("Editing your review — update and press Post!");
+//           return;
+//         }
 
-            // delete
-            if (btn.matches("[data-delete]")) {
-              const id = btn.dataset.delete;
-              const confirmed = confirm("Delete this review?");
-              if (!confirmed) return;
+//         // delete
+//         if (btn.matches("[data-delete]")) {
+//           const id = btn.dataset.delete;
+//           const confirmed = confirm("Delete this review?");
+//           if (!confirmed) return;
 
-              try {
-                const res = await fetch(`/api/reviews/${id}`, {
-                  method: "DELETE",
-                  credentials: "include",
-                });
-                if (res.ok) {
-                  toast("Review deleted!");
-                  await loadReviews();
-                } else {
-                  toast("Failed to delete review");
-                }
-              } catch (err) {
-                console.error(err);
-                toast("Error deleting review");
-              }
-            }
-          });
+//           try {
+//             const res = await fetch(`/api/reviews/${id}`, {
+//               method: "DELETE",
+//               credentials: "include",
+//             });
+//             if (res.ok) {
+//               toast("Review deleted!");
+//               await loadReviews();
+//             } else {
+//               toast("Failed to delete review");
+//             }
+//           } catch (err) {
+//             console.error(err);
+//             toast("Error deleting review");
+//           }
+//         }
+//       });
 
-      return; // stop here (skip local fallback)
-    }
-  } catch (err) {
-    console.error("Error loading reviews:", err);
-  }
+//       return; // stop here (skip local fallback)
+//     }
+//   } catch (err) {
+//     console.error("Error loading reviews:", err);
+//   }
 
-  // fallback to local storage if server fails
-  if (list) {
-    const arr = JSON.parse(
-      localStorage.getItem("reviews_" + currentId) || "[]"
-    );
-    list.innerHTML =
-      arr
-        .map((r) => {
-          const dt = new Date(r.at).toLocaleString();
-          return `<li><b>${r.user}</b> • ⭐ ${r.rating}<br>${r.text}<br><span class="muted">${dt}</span></li>`;
-        })
-        .join("") || "<p class='muted'>No reviews yet.</p>";
-  }
-}
+//   // fallback to local storage if server fails
+//   if (list) {
+//     const arr = JSON.parse(
+//       localStorage.getItem("reviews_" + currentId) || "[]"
+//     );
+//     list.innerHTML =
+//       arr
+//         .map((r) => {
+//           const dt = new Date(r.at).toLocaleString();
+//           return `<li><b>${r.user}</b> • ⭐ ${r.rating}<br>${r.text}<br><span class="muted">${dt}</span></li>`;
+//         })
+//         .join("") || "<p class='muted'>No reviews yet.</p>";
+//   }
+// }
 
 // ============== Queue actions ==============
 // async function joinQueue(people) {
@@ -377,6 +403,139 @@ async function loadReviews() {
 // }
 
 // === Replace your joinQueue with this ===
+async function loadReviews() {
+  const avgEl = qs("#avgRating"),
+    totalEl = qs("#totalReviews"),
+    list = qs("#reviewsList");
+
+  // Figure out current user (prefer server; fallback to localStorage)
+  let myId = localStorage.getItem("customerId") || "";
+  try {
+    const meResp = await fetch("/api/customers/me", { credentials: "include" });
+    if (meResp.ok) {
+      const me = await meResp.json();
+      myId = getId(me.id || me._id || me.userId || me.customerId) || myId;
+      if (myId) localStorage.setItem("customerId", myId);
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  try {
+    const r = await fetchJSON(`/api/reviews/${encodeURIComponent(currentId)}`);
+    if (!Array.isArray(r)) throw new Error("Bad reviews payload");
+
+    const total = r.length;
+    const avg = total
+      ? r.reduce((sum, x) => sum + (Number(x.rating) || 0), 0) / total
+      : 0;
+
+    if (avgEl) avgEl.textContent = total ? avg.toFixed(1) : "—";
+    if (totalEl) totalEl.textContent = String(total);
+
+    if (list) {
+      if (total === 0) {
+        list.innerHTML = "<p class='muted'>No reviews yet.</p>";
+      } else {
+        list.innerHTML = r
+          .map((x) => {
+            const authorId = getId(
+              x.userId ||
+                x.customerId ||
+                x.authorId ||
+                (x.user && (x.user.id || x.user._id)) ||
+                (x.customer && (x.customer.id || x.customer._id))
+            );
+            const isMine = myId && authorId && authorId === myId;
+
+            const reviewId = getId(x._id);
+            const ratingVal = Number(x.rating) || 0;
+            const created =
+              x.createdAt || x.at || x.created || x.timestamp || null;
+
+            return `
+              <div class="review">
+                <div class="row">
+                  <div class="star">⭐ ${ratingVal.toFixed(1)}</div>
+                  <div class="by">${escHtml(x.name || x.userName || "Anonymous")}</div>
+                  <div class="at">${created ? new Date(created).toLocaleString() : ""}</div>
+                </div>
+                <p>${escHtml(x.comments || "").replace(/\n/g, "<br>")}</p>
+                ${
+                  isMine
+                    ? `
+                      <div class="review-actions">
+                        <button class="btn small"
+                                data-edit="${escAttr(reviewId)}"
+                                data-rate="${escAttr(String(ratingVal))}"
+                                data-text="${escAttr(x.comments || "")}">Edit</button>
+                        <button class="btn small danger"
+                                data-delete="${escAttr(reviewId)}">Delete</button>
+                      </div>
+                    `
+                    : ""
+                }
+              </div>
+            `;
+          })
+          .join("");
+      }
+    }
+
+    // Attach one delegated click handler to the reviews container (once)
+    if (list && !reviewsListBound) {
+      reviewsListBound = true;
+      list.addEventListener("click", async (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+
+        // EDIT
+        if (btn.dataset.edit) {
+          editingReviewId = btn.dataset.edit;
+          const textEl = document.getElementById("revText");
+          const ratingEl = document.getElementById("revRating");
+          if (textEl) textEl.value = btn.dataset.text || "";
+          if (ratingEl) ratingEl.value = btn.dataset.rate || 5;
+          toast("Editing your review — update and press Post!");
+          return;
+        }
+
+        // DELETE
+        if (btn.dataset.delete) {
+          const id = btn.dataset.delete;
+          const confirmed = confirm("Delete this review?");
+          if (!confirmed) return;
+          try {
+            const res = await fetch(`/api/reviews/${encodeURIComponent(id)}`, {
+              method: "DELETE",
+              credentials: "include",
+            });
+            if (res.ok) {
+              toast("Review deleted!");
+              await loadReviews();
+            } else {
+              let msg = "Failed to delete review";
+              try {
+                const j = await res.json();
+                if (j?.error) msg = `${msg}: ${j.error}`;
+              } catch {}
+              toast(msg);
+            }
+          } catch (err) {
+            console.error(err);
+            toast("Error deleting review");
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Error loading reviews:", err);
+    if (list) {
+      list.innerHTML = "<p class='muted'>Could not load reviews.</p>";
+    }
+  }
+}
+
 async function joinQueue(people) {
   const size = Math.max(1, Math.min(12, Number(people || 1)));
   const venueId = currentId;
@@ -617,7 +776,7 @@ function bindUI() {
     if (!textV) {
       toast("Write something first");
       return;
-      }
+    }
     try {
       // if editing mode is active → PUT request
       if (editingReviewId) {
@@ -642,7 +801,11 @@ function bindUI() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ venueId: currentId, rating: ratingV, comments: textV }),
+        body: JSON.stringify({
+          venueId: currentId,
+          rating: ratingV,
+          comments: textV,
+        }),
       });
 
       if (r.ok) {
