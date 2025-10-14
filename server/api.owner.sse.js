@@ -121,23 +121,25 @@ router.get("/queue/stream", requireOwner, async (req, res) => {
   const sendSnapshot = async () => {
     try {
       const filter = await buildQueueFilterForOwner(req);
-      const items = await Queue.find(filter)
-        .sort({ position: 1, joinedAt: 1 })
+      const items = await Queue.find({
+        ...filter,
+        status: { $in: ["waiting", "active"] },
+      })
+        .sort({ order: 1, joinedAt: 1, _id: 1 })
         .toArray();
-      const capacity = await computeSpotsLeftForOwner(req);
-      const settings = await loadOrInitSettings(req.session.ownerId);
+      // const capacity = await computeSpotsLeftForOwner(req);
+      //const settings = await loadOrInitSettings(req.session.ownerId);
 
       sseSend(res, "snapshot", {
-        // queue items in the shape the UI expects
-        queue: items.map((x) => ({
+        queue: items.map((x, i) => ({
           _id: String(x._id),
           name: x.name || "Guest",
           email: x.email || "",
           phone: x.phone || "",
           people: x.people || x.partySize || 1,
-          position: x.position || x.order || 0,
+          position: i + 1, // live position
           status: x.status || "waiting",
-          order: x.order || 0,
+          order: x.order || i + 1, // optional: useful for debugging
         })),
         // keep both "capacity" and top-level mirrors for the dashboard
         capacity,

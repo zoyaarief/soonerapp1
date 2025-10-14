@@ -192,10 +192,12 @@ api.post("/customers/update", async (req, res) => {
     return res.status(401).json({ error: "Not authenticated" });
   const db = getDb();
   const { name, phone } = req.body;
-  await db.collection("customers").updateOne(
-    { _id: new ObjectId(req.session.customerId) },
-    { $set: { name, phone } }
-  );
+  await db
+    .collection("customers")
+    .updateOne(
+      { _id: new ObjectId(req.session.customerId) },
+      { $set: { name, phone } }
+    );
   res.json({ ok: true });
 });
 
@@ -627,15 +629,29 @@ api.get("/owner_settings/:venueId", async (req, res) => {
 // --- Active queue for the logged-in customer (or ?customerId= for testing) ---
 
 // compute next order atomically per venue
+// async function nextOrder(db, venueId) {
+//   const r = await db
+//     .collection("settings")
+//     .findOneAndUpdate(
+//       { _id: `seq:order:${venueId}` },
+//       { $inc: { value: 1 } },
+//       { upsert: true, returnDocument: "after" }
+//     );
+//   return r.value.value || 1;
+// }
+// compute next order atomically per venue
 async function nextOrder(db, venueId) {
-  const r = await db
-    .collection("settings")
-    .findOneAndUpdate(
-      { _id: `seq:order:${venueId}` },
-      { $inc: { value: 1 } },
-      { upsert: true, returnDocument: "after" }
-    );
-  return r.value.value || 1;
+  const key = `seq:order:${venueId}`;
+  const r = await db.collection("settings").findOneAndUpdate(
+    { _id: key },
+    {
+      $inc: { value: 1 },
+      // 👇 ensure unique-indexed field exists so we don't collide
+      $setOnInsert: { ownerId: key },
+    },
+    { upsert: true, returnDocument: "after" }
+  );
+  return r.value?.value || 1;
 }
 
 //POST /api/queue/:venueId/join  (path param)
@@ -1041,88 +1057,442 @@ api.post("/queue/:venueId/join", async (req, res) => {
 //   }
 // }
 
+// async function enqueue(req, res) {
+//   try {
+//     const db = getDb();
+//     const b = req.body || {};
+
+//     // Accept ObjectId or string; don't force OID
+//     const venueId = ObjectId.isValid(b.venueId)
+//       ? new ObjectId(b.venueId)
+//       : String(b.venueId || "").trim();
+//     if (!venueId) return res.status(400).json({ error: "venueId is required" });
+
+//     const userId = ObjectId.isValid(b.userId)
+//       ? new ObjectId(b.userId)
+//       : b.userId
+//         ? String(b.userId)
+//         : undefined;
+
+//     const partySize = new Int32(
+//       Math.max(1, Number(b.partySize ?? b.people ?? 1))
+//     );
+
+//     const doc = {
+//       venueId,
+//       userId, // optional
+//       name: String(b.name || ""),
+//       email: String(b.email || ""),
+//       phone: b.phone ? String(b.phone) : undefined,
+//       partySize,
+//       serviceUnitId: ObjectId.isValid(b.serviceUnitId)
+//         ? new ObjectId(b.serviceUnitId)
+//         : b.serviceUnitId
+//           ? String(b.serviceUnitId)
+//           : undefined,
+//       queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
+//         ? b.queueMode
+//         : undefined,
+//       joinedAt: b.joinedAt ? new Date(b.joinedAt) : new Date(),
+//       appointmentAt: b.appointmentAt ? new Date(b.appointmentAt) : undefined,
+//       estimatedReadyAt: b.estimatedReadyAt
+//         ? new Date(b.estimatedReadyAt)
+//         : undefined,
+//       nearTurnAt: b.nearTurnAt ? new Date(b.nearTurnAt) : undefined,
+//       arrivalDeadline: b.arrivalDeadline
+//         ? new Date(b.arrivalDeadline)
+//         : undefined,
+//       timerPaused:
+//         typeof b.timerPaused === "boolean" ? b.timerPaused : undefined,
+//       status: ["active", "served", "cancelled", "no_show"].includes(b.status)
+//         ? b.status
+//         : "active",
+//       notes: b.notes ? String(b.notes) : undefined,
+//     };
+
+//     // strip undefined
+//     Object.keys(doc).forEach((k) => doc[k] === undefined && delete doc[k]);
+
+//     const ins = await db.collection("queue").insertOne(doc);
+
+//     const after = await db
+//       .collection("queue")
+//       .find({ venueId, status: "active" })
+//       .sort({ joinedAt: 1 })
+//       .project({ _id: 1 })
+//       .toArray();
+//     const idx = after.findIndex(
+//       (x) => String(x._id) === String(ins.insertedId)
+//     );
+//     const position = idx > 0 ? idx + 1 : null;
+
+//     return res.json({
+//       ok: true,
+//       order: String(ins.insertedId),
+//       position,
+//       approxWaitMins: computeApproxWait(settings, position || 0),
+//     });
+//   } catch (err) {
+//     if (err?.code === 121) {
+//       return res
+//         .status(400)
+//         .json({ error: "Document failed validation", details: err?.errInfo });
+//     }
+//     console.error("JOIN error:", err);
+//     return res.status(500).json({ error: "Server error" });
+//   }
+// }
+
+// async function enqueue(req, res) {
+//   try {
+//     const db = getDb();
+//     const b = req.body || {};
+
+//     // --- venueId (accept ObjectId or string)
+//     const venueIdRaw = b.venueId ?? req.params?.venueId;
+//     const venueId = ObjectId.isValid(venueIdRaw)
+//       ? new ObjectId(String(venueIdRaw))
+//       : String(venueIdRaw || "").trim();
+//     if (!venueId) return res.status(400).json({ error: "venueId is required" });
+
+//     // --- optional userId (accept ObjectId or string)
+//     let userId;
+//     if (b.userId != null) {
+//       userId = ObjectId.isValid(b.userId)
+//         ? new ObjectId(String(b.userId))
+//         : String(b.userId);
+//     }
+
+//     // --- partySize (validate, then wrap as Int32)
+//     const partySizeNum = Number(b.partySize ?? b.people ?? 1);
+//     if (!Number.isFinite(partySizeNum) || partySizeNum < 1) {
+//       return res.status(400).json({ error: "Invalid party size" });
+//     }
+//     const partySize = new Int32(Math.floor(partySizeNum));
+
+//     // --- safe date helper
+//     const safeDate = (v) =>
+//       v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) : undefined;
+
+//     // --- build doc (strip undefined later)
+//     const doc = {
+//       venueId,
+//       userId, // optional
+//       name: (b.name ?? "").toString().trim(),
+//       email: (b.email ?? "").toString().trim(),
+//       phone: b.phone != null ? String(b.phone) : undefined,
+//       partySize,
+//       serviceUnitId:
+//         b.serviceUnitId != null
+//           ? ObjectId.isValid(b.serviceUnitId)
+//             ? new ObjectId(String(b.serviceUnitId))
+//             : String(b.serviceUnitId)
+//           : undefined,
+//       queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
+//         ? b.queueMode
+//         : undefined,
+//       joinedAt: safeDate(b.joinedAt) || new Date(),
+//       appointmentAt: safeDate(b.appointmentAt),
+//       estimatedReadyAt: safeDate(b.estimatedReadyAt),
+//       nearTurnAt: safeDate(b.nearTurnAt),
+//       arrivalDeadline: safeDate(b.arrivalDeadline),
+//       timerPaused:
+//         typeof b.timerPaused === "boolean" ? b.timerPaused : undefined,
+//       status: ["active", "served", "cancelled", "no_show"].includes(b.status)
+//         ? b.status
+//         : "active",
+//       notes: typeof b.notes === "string" ? b.notes : undefined,
+//     };
+
+//     // If your $jsonSchema requires these, fail early with 400 (prevents 121 later)
+//     if (!doc.name) return res.status(400).json({ error: "name is required" });
+//     if (!doc.email) return res.status(400).json({ error: "email is required" });
+
+//     // strip undefined so validator doesn't see them
+//     Object.keys(doc).forEach((k) => doc[k] === undefined && delete doc[k]);
+
+//     // --- insert
+//     const ins = await db.collection("queue").insertOne(doc);
+
+//     // --- compute position (first-in-line should be 1)
+//     const after = await db
+//       .collection("queue")
+//       .find({ venueId, status: "active" })
+//       .sort({ joinedAt: 1 })
+//       .project({ _id: 1 })
+//       .toArray();
+
+//     const idx = after.findIndex(
+//       (x) => String(x._id) === String(ins.insertedId)
+//     );
+//     const position = idx >= 0 ? idx + 1 : null;
+
+//     // --- fetch settings so computeApproxWait has a value
+//     const settings = await db.collection("owner_settings").findOne({
+//       $or: [
+//         { venueId },
+//         { ownerId: venueId },
+//         { venueId: String(venueId) },
+//         { ownerId: String(venueId) },
+//       ],
+//     });
+
+//     return res.json({
+//       ok: true,
+//       order: String(ins.insertedId),
+//       position,
+//       approxWaitMins: computeApproxWait(settings, position || 0),
+//     });
+//   } catch (err) {
+//     if (err?.code === 121) {
+//       return res
+//         .status(400)
+//         .json({ error: "Document failed validation", details: err?.errInfo });
+//     }
+//     console.error("JOIN error:", err);
+//     return res.status(500).json({ error: "Server error" });
+//   }
+// }
+
 async function enqueue(req, res) {
   try {
     const db = getDb();
     const b = req.body || {};
 
-    // Accept ObjectId or string; don't force OID
-    const venueId = ObjectId.isValid(b.venueId)
-      ? new ObjectId(b.venueId)
-      : String(b.venueId || "").trim();
-    if (!venueId) return res.status(400).json({ error: "venueId is required" });
+    // --- venueId: prefer storing as STRING (matches your saved doc)
+    const venueIdRaw = b.venueId ?? req.params?.venueId;
+    const venueIdStr = String(venueIdRaw || "").trim();
+    if (!venueIdStr)
+      return res.status(400).json({ error: "venueId is required" });
 
-    const userId = ObjectId.isValid(b.userId)
-      ? new ObjectId(b.userId)
-      : b.userId
-        ? String(b.userId)
-        : undefined;
+    // Also keep an ObjectId variant for lookups (some rows/settings might use OID)
+    const venueIdOID = ObjectId.isValid(venueIdStr)
+      ? new ObjectId(venueIdStr)
+      : null;
 
-    const partySize = new Int32(
-      Math.max(1, Number(b.partySize ?? b.people ?? 1))
-    );
+    // --- userId (optional): accept string or ObjectId
+    let userId;
+    if (b.userId != null) {
+      userId = ObjectId.isValid(b.userId)
+        ? new ObjectId(String(b.userId))
+        : String(b.userId);
+    }
 
+    // --- partySize: validate first, then wrap Int32
+    const n = Number(b.partySize ?? b.people ?? 1);
+    if (!Number.isFinite(n) || n < 1) {
+      return res.status(400).json({ error: "Invalid party size" });
+    }
+    const partySize = new Int32(Math.floor(n));
+
+    // --- safe date helper
+    const safeDate = (v) =>
+      v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) : undefined;
+
+    // --- compute a monotonic order per venue (atomic counter)
+    const order = await nextOrder(db, venueIdStr);
+    // --- build insert doc (strip undefined later)
+    // const doc = {
+    //   venueId: venueIdStr, // << store as string for consistency
+    //   userId, // optional
+    //   name: (b.name ?? "").toString().trim(),
+    //   email: (b.email ?? "").toString().trim(),
+    //   phone: b.phone != null ? String(b.phone) : undefined,
+    //   partySize,
+    //   serviceUnitId:
+    //     b.serviceUnitId != null
+    //       ? ObjectId.isValid(b.serviceUnitId)
+    //         ? new ObjectId(String(b.serviceUnitId))
+    //         : String(b.serviceUnitId)
+    //       : undefined,
+    //   queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
+    //     ? b.queueMode
+    //     : undefined,
+    //   joinedAt: safeDate(b.joinedAt) || new Date(),
+    //   appointmentAt: safeDate(b.appointmentAt),
+    //   estimatedReadyAt: safeDate(b.estimatedReadyAt),
+    //   nearTurnAt: safeDate(b.nearTurnAt),
+    //   arrivalDeadline: safeDate(b.arrivalDeadline),
+    //   timerPaused:
+    //     typeof b.timerPaused === "boolean" ? b.timerPaused : undefined,
+    //   status: ["active", "served", "cancelled", "no_show"].includes(b.status)
+    //     ? b.status
+    //     : "active",
+    //   notes: typeof b.notes === "string" ? b.notes : undefined,
+    // };
+    // helper to ensure Int32 for validator
+    const toI32 = (n) => new Int32(Math.floor(Number(n)));
+
+    // --- build insert doc (strip undefined later)
+    // const doc = {
+    //   venueId: venueIdStr, // store as string for consistency
+    //   userId, // optional
+    //   name: (b.name ?? "").toString().trim(),
+    //   email: (b.email ?? "").toString().trim(),
+    //   phone: b.phone != null ? String(b.phone) : undefined,
+    //   partySize,
+    //   serviceUnitId:
+    //     b.serviceUnitId != null
+    //       ? ObjectId.isValid(b.serviceUnitId)
+    //         ? new ObjectId(String(b.serviceUnitId))
+    //         : String(b.serviceUnitId)
+    //       : undefined,
+    //   queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
+    //     ? b.queueMode
+    //     : undefined,
+    //   joinedAt: safeDate(b.joinedAt) || new Date(),
+    //   appointmentAt: safeDate(b.appointmentAt),
+    //   estimatedReadyAt: safeDate(b.estimatedReadyAt),
+    //   nearTurnAt: safeDate(b.nearTurnAt),
+    //   arrivalDeadline: safeDate(b.arrivalDeadline),
+    //   timerPaused:
+    //     typeof b.timerPaused === "boolean" ? b.timerPaused : undefined,
+    //   status: ["active", "served", "cancelled", "no_show"].includes(b.status)
+    //     ? b.status
+    //     : "waiting", // default is 'waiting' (safe with existing reads)
+    //   // NEW: stable FCFS key + initial position
+    //   order,
+    //   position: order,
+    //   notes: typeof b.notes === "string" ? b.notes : undefined,
+    // };
+    // --- build insert doc (strip undefined later, as you already do below)
     const doc = {
-      venueId,
+      venueId: venueIdStr, // keep as string if that matches your data
       userId, // optional
-      name: String(b.name || ""),
-      email: String(b.email || ""),
-      phone: b.phone ? String(b.phone) : undefined,
-      partySize,
-      serviceUnitId: ObjectId.isValid(b.serviceUnitId)
-        ? new ObjectId(b.serviceUnitId)
-        : b.serviceUnitId
-          ? String(b.serviceUnitId)
+      name: (b.name ?? "").toString().trim(),
+      email: (b.email ?? "").toString().trim(),
+      phone: b.phone != null ? String(b.phone) : undefined,
+
+      partySize, // you already build this as Int32 earlier
+
+      serviceUnitId:
+        b.serviceUnitId != null
+          ? ObjectId.isValid(b.serviceUnitId)
+            ? new ObjectId(String(b.serviceUnitId))
+            : String(b.serviceUnitId)
           : undefined,
+
       queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
         ? b.queueMode
         : undefined,
-      joinedAt: b.joinedAt ? new Date(b.joinedAt) : new Date(),
-      appointmentAt: b.appointmentAt ? new Date(b.appointmentAt) : undefined,
-      estimatedReadyAt: b.estimatedReadyAt
-        ? new Date(b.estimatedReadyAt)
-        : undefined,
-      nearTurnAt: b.nearTurnAt ? new Date(b.nearTurnAt) : undefined,
-      arrivalDeadline: b.arrivalDeadline
-        ? new Date(b.arrivalDeadline)
-        : undefined,
+
+      joinedAt: safeDate(b.joinedAt) || new Date(),
+      appointmentAt: safeDate(b.appointmentAt),
+      estimatedReadyAt: safeDate(b.estimatedReadyAt),
+      nearTurnAt: safeDate(b.nearTurnAt),
+      arrivalDeadline: safeDate(b.arrivalDeadline),
       timerPaused:
         typeof b.timerPaused === "boolean" ? b.timerPaused : undefined,
+
+      // 🔴 IMPORTANT: default must match your collection enum
       status: ["active", "served", "cancelled", "no_show"].includes(b.status)
         ? b.status
         : "active",
-      notes: b.notes ? String(b.notes) : undefined,
+
+      // 🔴 IMPORTANT: keep these as Int32 if your schema says "bsonType: 'int'"
+      order: toI32(order),
+      position: toI32(order),
+
+      notes: typeof b.notes === "string" ? b.notes : undefined,
     };
 
-    // strip undefined
+    // If your validator expects these, fail early (prevents code 121)
+    if (!doc.name) return res.status(400).json({ error: "name is required" });
+    if (!doc.email) return res.status(400).json({ error: "email is required" });
+
     Object.keys(doc).forEach((k) => doc[k] === undefined && delete doc[k]);
 
+    // --- insert
     const ins = await db.collection("queue").insertOne(doc);
 
-    const after = await db
-      .collection("queue")
-      .find({ venueId, status: "active" })
-      .sort({ joinedAt: 1 })
-      .project({ _id: 1 })
-      .toArray();
-    const idx = after.findIndex(
-      (x) => String(x._id) === String(ins.insertedId)
-    );
-    const position = idx > 0 ? idx + 1 : null;
+    // --- compute position; match both string and ObjectId venueId rows
+    let position = null;
+    // try {
+    //   const match = {
+    //     status: "active",
+    //     $or: [{ venueId: venueIdStr }].concat(
+    //       venueIdOID ? [{ venueId: venueIdOID }] : []
+    //     ),
+    //   };
+
+    //   const ids = await db
+    //     .collection("queue")
+    //     .find(match)
+    //     .sort({ joinedAt: 1 })
+    //     .map((d) => d._id) // avoid .project() incompatibilities
+    //     .toArray();
+
+    //   const idx = ids.findIndex((id) => String(id) === String(ins.insertedId));
+    //   position = idx >= 0 ? idx + 1 : null; // first in line => 1
+    // } catch (e) {
+    //   console.error("[enqueue] position compute failed:", e);
+    //   position = null; // don’t 500 the request just because ETA calc failed
+    // }
+
+    // --- approx wait mins (settings optional; default to 8)
+    try {
+      const match = {
+        status: { $in: ["waiting", "active"] },
+        $or: [{ venueId: venueIdStr }].concat(
+          venueIdOID ? [{ venueId: venueIdOID }] : []
+        ),
+      };
+
+      const ids = await db
+        .collection("queue")
+        .find(match)
+        .sort({ order: 1, joinedAt: 1, _id: 1 })
+        .map((d) => d._id)
+        .toArray();
+
+      const idx = ids.findIndex((id) => String(id) === String(ins.insertedId));
+      position = idx >= 0 ? idx + 1 : null; // first in line => 1
+    } catch (e) {
+      console.error("[enqueue] position compute failed:", e);
+      position = null;
+    }
+
+    let avgPerParty = 8;
+    try {
+      const settings = await db.collection("owner_settings").findOne({
+        $or: [
+          { venueId: venueIdStr },
+          ...(venueIdOID ? [{ venueId: venueIdOID }] : []),
+          { ownerId: venueIdStr },
+          ...(venueIdOID ? [{ ownerId: venueIdOID }] : []),
+        ],
+      });
+      if (settings && Number(settings.avgWaitMins)) {
+        avgPerParty = Number(settings.avgWaitMins);
+      }
+    } catch (e) {
+      console.error("[enqueue] settings lookup failed:", e);
+    }
+
+    const approxWaitMins = (position || 0) * avgPerParty;
 
     return res.json({
       ok: true,
       order: String(ins.insertedId),
       position,
-      approxWaitMins: computeApproxWait(settings, position || 0),
+      approxWaitMins,
     });
   } catch (err) {
+    if (err?.errInfo?.details) {
+      console.error(
+        "QUEUE VALIDATION DETAILS:\n" +
+          JSON.stringify(err.errInfo.details, null, 2)
+      );
+    }
+
+    // If validator trips: clean 400 with details
     if (err?.code === 121) {
       return res
         .status(400)
         .json({ error: "Document failed validation", details: err?.errInfo });
     }
-    console.error("JOIN error:", err);
+
+    console.error("JOIN error:", err?.stack || err);
     return res.status(500).json({ error: "Server error" });
   }
 }

@@ -433,14 +433,15 @@ router.get("/queue", requireOwner, async (req, res) => {
 
     res.json({
       ok: true,
-      queue: list.map((x) => ({
+      queue: list.map((x, i) => ({
         _id: String(x._id),
         name: x.name || "Guest",
         email: x.email || "",
         phone: x.phone || "",
         people: x.people || x.partySize || 1,
-        position: x.position || x.order || 0,
+        position: i + 1, // derive live position
         status: x.status || "waiting",
+        order: x.order ?? i + 1, // optional: expose for debugging/ops
       })),
       totalSeats,
       seatsUsed: used,
@@ -456,6 +457,35 @@ router.get("/queue", requireOwner, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// Keep stored `position` in sync with FCFS order.
+// Recalculates 1..n for a venue’s live entries after any mutation.
+async function reindexPositions(db, venueIdAny) {
+  const Queue = db.collection("queue");
+  const vStr = String(venueIdAny);
+  const vOID = ObjectId.isValid(vStr) ? new ObjectId(vStr) : null;
+
+  const match = {
+    status: { $in: ["waiting", "active"] },
+    $or: [{ venueId: vStr }].concat(vOID ? [{ venueId: vOID }] : []),
+  };
+
+  const list = await Queue.find(match)
+    .sort({ order: 1, joinedAt: 1, _id: 1 })
+    .project({ _id: 1 })
+    .toArray();
+
+  if (!list.length) return;
+
+  const ops = list.map((d, i) => ({
+    updateOne: {
+      filter: { _id: d._id },
+      update: { $set: { position: i + 1, updatedAt: new Date() } },
+    },
+  }));
+
+  await Queue.bulkWrite(ops, { ordered: false });
+}
 
 // ------------------------ Mark served → move to queue_pending (Undo window) ------------------------
 router.post("/queue/serve", requireOwner, async (req, res) => {
@@ -520,7 +550,7 @@ router.post("/queue/serve", requireOwner, async (req, res) => {
     );
 
     await Queue.deleteOne({ _id: doc._id });
-
+    await reindexPositions(db, doc.venueId);
     res.json({
       ok: true,
       removed: {
@@ -652,6 +682,8 @@ router.post("/queue/restore", requireOwner, async (req, res) => {
         logErr?.errInfo || logErr?.message || logErr
       );
     }
+
+    await reindexPositions(db, doc.venueId);
 
     res.json({ ok: true, restored: String(_id) });
   } catch (e) {

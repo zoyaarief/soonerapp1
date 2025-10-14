@@ -54,6 +54,9 @@ connectToDb()
     db.collection("queue")
       .createIndex({ restaurantId: 1, position: 1 })
       .catch(() => {});
+    db.collection("queue")
+      .createIndex({ venueId: 1, order: 1, joinedAt: 1 })
+      .catch(() => {});
 
     // TTL for pending deletes
     db.collection("queue_pending")
