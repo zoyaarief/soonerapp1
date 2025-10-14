@@ -248,7 +248,10 @@ custLogin?.addEventListener("submit", async (e) => {
     }
 
     localStorage.setItem("role", "customer");
-    localStorage.setItem("customerName", data.user?.name || email.split("@")[0] || "Customer");
+    localStorage.setItem(
+      "customerName",
+      data.user?.name || email.split("@")[0] || "Customer"
+    );
     setStatus(clMsg, "Logged in. Redirecting…", true);
 
     setTimeout(() => {
@@ -273,9 +276,9 @@ custSignup?.addEventListener("submit", async (e) => {
       email: (csEmail?.value || "").trim(),
       phone: (csPhone?.value || "").trim(),
       password: csPass?.value || "",
+      username: (csName?.value || "").trim(),
     };
-    const ok =
-      payload.name && payload.email && payload.password.length >= 6;
+    const ok = payload.name && payload.email && payload.password.length >= 6;
 
     if (!ok) {
       setStatus(csMsg, "Please complete all fields (min 6-char password).");
