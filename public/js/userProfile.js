@@ -1,5 +1,5 @@
 const links = document.querySelectorAll(".navlink");
-const sections = [...document.querySelectorAll("section.card")];
+const sections = [...document.querySelectorAll("section.user-card, section.section")];
 function setActive() {
   const y = window.scrollY + 120;
   let current = sections[0].id;
@@ -13,8 +13,117 @@ function setActive() {
 window.addEventListener("scroll", setActive);
 setActive();
 
-const chipName = document.getElementById("chipName");
-chipName.textContent = localStorage.getItem("customerName") || "Customer";
+const userName = document.getElementById("userName");
+userName.textContent = localStorage.getItem("customerName") || "Customer";
+
+(async function loadProfile() {
+  try {
+    const res = await fetch("/api/customers/me", { credentials: "include" });
+    if (!res.ok) throw new Error("not logged in");
+    const me = await res.json();
+    if (me.name) document.getElementById("userName").textContent = me.name;
+    if (me.email) document.getElementById("userEmail").textContent = me.email;
+    if (me.phone) document.getElementById("userPhone").textContent = me.phone;
+  } catch (err) {
+    console.warn("Could not load profile", err);
+  }
+})();
+
+// ---------- Favorites -----------
+async function loadFavorites() {
+  const box = document.getElementById("favorites");
+  box.textContent = "Loading…";
+
+  try {
+    const likes = await fetch("/api/likes", { credentials: "include" });
+    if (!likes.ok) throw new Error("Failed");
+    const arr = await likes.json();
+
+    if (!arr.length) {
+      box.innerHTML = `<div class="muted">No favorites yet.</div>`;
+      return;
+    }
+
+    box.innerHTML = "";
+    for (const fav of arr) {
+      const div = document.createElement("div");
+      div.className = "card small";
+      div.innerHTML = `
+        <h4>${fav.name || "Unnamed"}</h4>
+        <p>${fav.city || ""}</p>
+        <button class="btn small" onclick="location.href='place.html?id=${encodeURIComponent(fav.venueId || fav._id)}'">Open</button>
+      `;
+      box.appendChild(div);
+    }
+  } catch (err) {
+    console.error("Favorites load failed", err);
+    box.innerHTML = `<div class="muted">Couldn't load favorites.</div>`;
+  }
+}
+
+// ---------- Visited Places -----------
+async function loadHistory() {
+  const box = document.getElementById("history");
+  box.textContent = "Loading…";
+
+  try {
+    const r = await fetch("/api/history", { credentials: "include" });
+    if (!r.ok) throw new Error("Failed");
+    const items = await r.json();
+
+    if (!items.length) {
+      box.innerHTML = `<div class="muted">No visits yet.</div>`;
+      return;
+    }
+
+    box.innerHTML = "";
+    for (const h of items) {
+      const div = document.createElement("div");
+      const dt = new Date(h.at || h.date || Date.now()).toLocaleString();
+      div.className = "card small";
+      div.innerHTML = `
+        <h4>${h.name || "Unknown place"}</h4>
+        <p>Visited ${dt}</p>
+        <button class="btn small" onclick="location.href='place.html?id=${encodeURIComponent(h.venueId || h._id)}'">Revisit</button>
+      `;
+      box.appendChild(div);
+    }
+  } catch (err) {
+    console.error("History load failed", err);
+    box.innerHTML = `<div class="muted">Couldn't load history.</div>`;
+  }
+}
+
+// ---------- Active Queue -----------
+async function loadActiveQueue() {
+  const box = document.getElementById("activeQueue");
+  box.textContent = "Loading…";
+
+  try {
+    const res = await fetch("/api/queue/active", { credentials: "include" });
+    if (res.status === 204) {
+      box.innerHTML = `<div class="muted">You have no active queue.</div>`;
+      return;
+    }
+    if (!res.ok) throw new Error("Failed");
+    const data = await res.json();
+
+    box.innerHTML = `
+      <p>You’re in line at <b>${data.venueName || "—"}</b></p>
+      <p>Position: <b>#${data.position ?? "?"}</b> · Party: ${data.people ?? "?"}</p>
+      <p>Approx wait: ${data.approxWaitMins ? data.approxWaitMins + "m" : "—"}</p>
+      <div class="row gap">
+        <button class="btn small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}'">Open place</button>
+        <button class="btn ghost small" onclick="location.href='place.html?id=${encodeURIComponent(data.venueId)}#queue'">Manage</button>
+      </div>
+    `;
+  } catch (err) {
+    console.error("Active queue load failed", err);
+    box.innerHTML = `<div class="muted">Couldn't load queue info.</div>`;
+  }
+}
+
+
 
 // Avatar upload (local only)
 const avatarInput = document.getElementById("avatarInput");
@@ -150,10 +259,16 @@ function render() {
     localStorage.setItem("customerProfile", JSON.stringify(profile));
     if (profile.name) {
       localStorage.setItem("customerName", profile.name);
-      chipName.textContent = profile.name;
+      userName.textContent = profile.name;
     }
     status.style.color = "green";
     status.textContent = "Saved";
     setTimeout(() => (status.textContent = ""), 1500);
   });
 }
+
+(async function initExtras() {
+  await loadFavorites();
+  await loadHistory();
+  await loadActiveQueue();
+})();
