@@ -1005,17 +1005,17 @@ api.post("/queue/:venueId/join", async (req, res) => {
 //     //   createdAt: new Date(),
 //     // });
 
-//     // 9) Compute position + ETA after insert
-//     // const after = await db
-//     //   .collection("queue")
-//     //   .find({ venueId, status: "active" })
-//     //   .sort({ joinedAt: 1 })
-//     //   .project({ _id: 1 })
-//     //   .toArray();
-//     // const idx = after.findIndex(
-//     //   (x) => String(x._id) === String(ins.insertedId)
-//     // );
-//     // const position = idx >= 0 ? idx + 1 : null;
+// 9) Compute position + ETA after insert
+// const after = await db
+//   .collection("queue")
+//   .find({ venueId, status: "active" })
+//   .sort({ joinedAt: 1 })
+//   .project({ _id: 1 })
+//   .toArray();
+// const idx = after.findIndex(
+//   (x) => String(x._id) === String(ins.insertedId)
+// );
+// const position = idx >= 0 ? idx + 1 : null;
 
 //     return res.json({
 //       ok: true,
@@ -1033,27 +1033,35 @@ async function enqueue(req, res) {
   try {
     const db = getDb();
     const b = req.body || {};
+
+    // Accept ObjectId or string; don't force OID
     const venueId = ObjectId.isValid(b.venueId)
       ? new ObjectId(b.venueId)
-      : null;
-    if (!venueId)
-      return res.status(400).json({ error: "venueId must be ObjectId" });
+      : String(b.venueId || "").trim();
+    if (!venueId) return res.status(400).json({ error: "venueId is required" });
 
     const userId = ObjectId.isValid(b.userId)
       ? new ObjectId(b.userId)
-      : undefined;
-    const partySize = new Int32(Math.max(1, Number(b.partySize || 1)));
+      : b.userId
+        ? String(b.userId)
+        : undefined;
+
+    const partySize = new Int32(
+      Math.max(1, Number(b.partySize ?? b.people ?? 1))
+    );
 
     const doc = {
       venueId,
-      userId, // optional per your schema
+      userId, // optional
       name: String(b.name || ""),
       email: String(b.email || ""),
       phone: b.phone ? String(b.phone) : undefined,
       partySize,
       serviceUnitId: ObjectId.isValid(b.serviceUnitId)
         ? new ObjectId(b.serviceUnitId)
-        : undefined,
+        : b.serviceUnitId
+          ? String(b.serviceUnitId)
+          : undefined,
       queueMode: ["fifo", "timeSlots"].includes(b.queueMode)
         ? b.queueMode
         : undefined,
@@ -1073,17 +1081,37 @@ async function enqueue(req, res) {
         : "active",
       notes: b.notes ? String(b.notes) : undefined,
     };
+
+    // strip undefined
     Object.keys(doc).forEach((k) => doc[k] === undefined && delete doc[k]);
 
-    await db.collection("queue").insertOne(doc);
-    res.json({ ok: true });
+    const ins = await db.collection("queue").insertOne(doc);
+
+    const after = await db
+      .collection("queue")
+      .find({ venueId, status: "active" })
+      .sort({ joinedAt: 1 })
+      .project({ _id: 1 })
+      .toArray();
+    const idx = after.findIndex(
+      (x) => String(x._id) === String(ins.insertedId)
+    );
+    const position = idx > 0 ? idx + 1 : null;
+
+    return res.json({
+      ok: true,
+      order: String(ins.insertedId),
+      position,
+      approxWaitMins: computeApproxWait(settings, position || 0),
+    });
   } catch (err) {
-    if (err?.code === 121)
+    if (err?.code === 121) {
       return res
         .status(400)
         .json({ error: "Document failed validation", details: err?.errInfo });
+    }
     console.error("JOIN error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 }
 

@@ -232,29 +232,111 @@ async function loadReviews() {
 }
 
 // ============== Queue actions ==============
+// async function joinQueue(people) {
+//   const size = Math.max(1, Math.min(12, Number(people || 1)));
+//   const venueId = currentId;
+
+//   // const payload = { people: size, partySize: size, venueId };
+//   const payload = {
+//     venueId: "68eca3fe4bc49f3b1c2ee99e",
+//     userId: "68eabb67f83cd1758cbaff78",
+//     name: "Jeishu",
+//     email: "jeishu@example.com",
+//     phone: "+1-617-555-0199",
+//     partySize: 3,
+//     queueMode: "fifo",
+//     joinedAt: new Date().toISOString(),
+//     estimatedReadyAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+//     arrivalDeadline: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
+//     timerPaused: false,
+//     status: "active",
+//     notes: "Client-side seeded test",
+//   };
+
+//   try {
+//     // Try path-param route FIRST with the FULL payload
+//     let r = await fetch(`/api/queue/${encodeURIComponent(venueId)}/join`, {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       credentials: "include",
+//       body: JSON.stringify(payload),
+//     });
+
+//     // Fallback to the body route if path one isn't mounted
+//     if (r.status === 404 || r.status === 405) {
+//       r = await fetch(`/api/queue/join`, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         credentials: "include",
+//         body: JSON.stringify(payload),
+//       });
+//     }
+
+//     if (r.status === 401) {
+//       const ret = encodeURIComponent(location.pathname + location.search);
+//       location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+//       return;
+//     }
+
+//     if (!r.ok) {
+//       // Surface the exact server reason so you can fix the backend state quickly
+//       let msg = "Failed to join queue";
+//       try {
+//         const err = await r.json();
+//         if (err?.error) msg = `Failed to join queue: ${err.error}`;
+//       } catch {
+//         try {
+//           msg = `Failed to join queue: ${await r.text()}`;
+//         } catch {}
+//       }
+//       toast(msg);
+//       return;
+//     }
+
+//     toast("✅ Joined queue");
+//     toggleQueueButtons(true);
+//     await refreshMetrics();
+//   } catch (e) {
+//     console.error("[joinQueue] network error:", e);
+//     toast("Failed to join queue (network)");
+//   }
+// }
+
+// === Replace your joinQueue with this ===
 async function joinQueue(people) {
   const size = Math.max(1, Math.min(12, Number(people || 1)));
   const venueId = currentId;
 
-  // const payload = { people: size, partySize: size, venueId };
+  if (!venueId) {
+    toast("Missing place ID");
+    return;
+  }
+
+  // pull the logged-in customer from backend
+  const meResp = await fetch("/api/customers/me", { credentials: "include" });
+  if (meResp.status === 401) {
+    const ret = encodeURIComponent(location.pathname + location.search);
+    location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+    return;
+  }
+  if (!meResp.ok) {
+    toast("Could not load your profile");
+    return;
+  }
+  const me = await meResp.json();
+
+  // minimal payload: venue from page, user from session (customers collection)
   const payload = {
-    venueId: "68eca3fe4bc49f3b1c2ee99e",
-    userId: "68eabb67f83cd1758cbaff78",
-    name: "Jeishu",
-    email: "jeishu@example.com",
-    phone: "+1-617-555-0199",
-    partySize: 3,
-    queueMode: "fifo",
-    joinedAt: new Date().toISOString(),
-    estimatedReadyAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-    arrivalDeadline: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
-    timerPaused: false,
+    venueId, // owner/venue ObjectId from the page (?id=)
+    userId: String(me.id), // customer _id
+    name: me.name || "Customer",
+    email: me.email || "",
+    partySize: size,
     status: "active",
-    notes: "Client-side seeded test",
   };
 
   try {
-    // Try path-param route FIRST with the FULL payload
+    // try path-param route first
     let r = await fetch(`/api/queue/${encodeURIComponent(venueId)}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -262,7 +344,7 @@ async function joinQueue(people) {
       body: JSON.stringify(payload),
     });
 
-    // Fallback to the body route if path one isn't mounted
+    // fallback to body route if the above isn't mounted
     if (r.status === 404 || r.status === 405) {
       r = await fetch(`/api/queue/join`, {
         method: "POST",
@@ -279,16 +361,11 @@ async function joinQueue(people) {
     }
 
     if (!r.ok) {
-      // Surface the exact server reason so you can fix the backend state quickly
       let msg = "Failed to join queue";
       try {
         const err = await r.json();
         if (err?.error) msg = `Failed to join queue: ${err.error}`;
-      } catch {
-        try {
-          msg = `Failed to join queue: ${await r.text()}`;
-        } catch {}
-      }
+      } catch {}
       toast(msg);
       return;
     }
@@ -296,6 +373,7 @@ async function joinQueue(people) {
     toast("✅ Joined queue");
     toggleQueueButtons(true);
     await refreshMetrics();
+    startCountdownIfNeeded(); // optional: start local timer right away
   } catch (e) {
     console.error("[joinQueue] network error:", e);
     toast("Failed to join queue (network)");
@@ -451,41 +529,6 @@ function bindUI() {
     }
     joinQueue(n);
   });
-  // const btn = document.getElementById("enterBtn");
-  // if (!btn) return;
-
-  // btn.addEventListener("click", async () => {
-  //   const prev = btn.textContent;
-  //   btn.disabled = true;
-  //   btn.textContent = "Adding...";
-
-  //   try {
-  //     const res = await fetch("/api/queue/hardcoded", {
-  //       method: "POST",
-  //       credentials: "include",
-  //       headers: { "Content-Type": "application/json" },
-  //     });
-  //     if (!res.ok) {
-  //       const err = await res.json().catch(() => ({}));
-  //       throw new Error(err.error || "Request failed");
-  //     }
-
-  //     const data = await res.json();
-  //     console.log("Inserted:", data);
-  //     alert("You’re in! Entry ID: " + data.insertedId);
-  //   } catch (e) {
-  //     console.error(e);
-  //     alert("Sorry, could not join the queue. " + e.message);
-  //   } finally {
-  //     btn.disabled = false;
-  //     btn.textContent = prev;
-  //   }
-  // });
-  // qs("#cancelBtn")?.addEventListener("click", cancelQueue);
-  // qs("#imHere")?.addEventListener("click", arrived);
-  // qs("#checkedIn")?.addEventListener("click", () =>
-  //   toast("Waiting for owner to mark you served")
-  // );
 
   const form = document.getElementById("reviewForm");
   form?.addEventListener("submit", async (e) => {
