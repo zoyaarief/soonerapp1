@@ -15,7 +15,7 @@ body {
 }
 
 .backBtn {
-  color: #007bff;
+  color: #060606;
   text-decoration: none;
   font-weight: 500;
 }
@@ -53,7 +53,7 @@ body {
   position: absolute;
   bottom: 0;
   right: 0;
-  background: #007bff;
+  background:#ffe08a;
   color: white;
   font-size: 0.8rem;
   padding: 4px 8px;
