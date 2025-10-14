@@ -298,6 +298,7 @@ custSignup?.addEventListener("submit", async (e) => {
       return;
     }
 
+    localStorage.setItem("customerId", data.user.id || data.id);
     localStorage.setItem("role", "customer");
     localStorage.setItem("customerName", payload.name);
     setStatus(csMsg, "Account created. Redirecting…", true);

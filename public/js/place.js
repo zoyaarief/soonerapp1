@@ -8,6 +8,7 @@ function text(el, val) {
   if (el) el.textContent = val ?? "—";
 }
 
+let editingReviewId = null; // keeps track if user is editing
 const usp = new URLSearchParams(location.search);
 const currentId = usp.get("id");
 
@@ -189,34 +190,82 @@ async function loadAnnouncements() {
 }
 
 async function loadReviews() {
-  const r = await fetchJSON(
-    `/api/reviews/venue/${encodeURIComponent(currentId)}`
-  );
   const avgEl = qs("#avgRating"),
     totalEl = qs("#totalReviews"),
     list = qs("#reviewsList");
-  if (r && (r.total || 0) > 0) {
-    if (avgEl)
-      avgEl.textContent = r.avgRating ? Number(r.avgRating).toFixed(1) : "—";
-    if (totalEl) totalEl.textContent = r.total || 0;
-    if (list)
-      list.innerHTML = r.items
-        .map(
-          (x) => `
-      <div class="review">
-        <div class="row">
-          <div class="star">⭐ ${x.rating?.toFixed ? x.rating.toFixed(1) : x.rating}</div>
-          <div class="by">${x.customerName || "Anonymous"}</div>
-          <div class="at">${x.createdAt ? new Date(x.createdAt).toLocaleString() : ""}</div>
-        </div>
-        <p>${(x.comment || "").replace(/</g, "&lt;")}</p>
-      </div>
-    `
-        )
-        .join("");
-    return;
+
+  try {
+    // fetch all reviews for this venue
+    const r = await fetchJSON(`/api/reviews/${encodeURIComponent(currentId)}`);
+
+    // if backend returned an array with reviews
+    if (Array.isArray(r) && r.length > 0) {
+      // compute average + total
+      const avg =
+        r.reduce((sum, x) => sum + (Number(x.rating) || 0), 0) / r.length;
+
+      if (avgEl) avgEl.textContent = avg.toFixed(1);
+      if (totalEl) totalEl.textContent = r.length;
+
+      // render all reviews with edit button for owner
+      if (list)
+        list.innerHTML = r
+          .map((x) => {
+            const myId = localStorage.getItem("customerId");
+            const isMine = String(x.userId) === String(myId);
+
+            return `
+            <div class="review">
+              <div class="row">
+                <div class="star">⭐ ${
+                  x.rating?.toFixed ? x.rating.toFixed(1) : x.rating
+                }</div>
+                <div class="by">${x.name || "Anonymous"}</div>
+                <div class="at">${
+                  x.createdAt
+                    ? new Date(x.createdAt).toLocaleString()
+                    : ""
+                }</div>
+              </div>
+              <p>${(x.comments || "")
+                .replace(/</g, "&lt;")
+                .replace(/\n/g, "<br>")}</p>
+              ${
+                isMine
+                  ? `<button class="btn small" data-edit="${x._id}" data-rate="${x.rating}" data-text="${
+                      x.comments || ""
+                    }">Edit</button>`
+                  : ""
+              }
+            </div>`;
+          })
+          .join("");
+
+          // handle edit button clicks
+          list.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-edit]");
+            if (!btn) return;
+
+            // mark the review being edited
+            editingReviewId = btn.dataset.edit;
+
+            // prefill the form fields
+            const textEl = document.getElementById("revText");
+            const ratingEl = document.getElementById("revRating");
+            textEl.value = btn.dataset.text || "";
+            ratingEl.value = btn.dataset.rate || 5;
+            textEl.focus();
+
+            toast("Editing your review — update and press Post!");
+          });
+
+      return; // stop here (skip local fallback)
+    }
+  } catch (err) {
+    console.error("Error loading reviews:", err);
   }
-  // fallback to local storage (your original)
+
+  // fallback to local storage if server fails
   if (list) {
     const arr = JSON.parse(
       localStorage.getItem("reviews_" + currentId) || "[]"
@@ -543,35 +592,43 @@ function bindUI() {
     if (!textV) {
       toast("Write something first");
       return;
-    }
+      }
     try {
-      const r = await fetch("/api/reviews/add", {
+      // if editing mode is active → PUT request
+      if (editingReviewId) {
+        const r = await fetch(`/api/reviews/${editingReviewId}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating: ratingV, comments: textV }),
+        });
+
+        if (r.ok) {
+          toast("Review updated!");
+          editingReviewId = null; // reset edit mode
+          textEl.value = "";
+          await loadReviews();
+          return;
+        }
+      }
+
+      // otherwise normal POST (new review)
+      const r = await fetch(`/api/reviews/${currentId}`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          venueId: currentId,
-          rating: ratingV,
-          comment: textV,
-        }),
+        body: JSON.stringify({ venueId: currentId, rating: ratingV, comments: textV }),
       });
+
       if (r.ok) {
         textEl.value = "";
-        toast("Review posted");
+        toast("Review posted!");
         await loadReviews();
         return;
       }
-    } catch {}
-    // fallback local
-    const user = localStorage.getItem("customerName") || "Customer";
-    const arr = JSON.parse(
-      localStorage.getItem("reviews_" + currentId) || "[]"
-    );
-    arr.unshift({ user, rating: ratingV, text: textV, at: Date.now() });
-    localStorage.setItem("reviews_" + currentId, JSON.stringify(arr));
-    textEl.value = "";
-    toast("Review posted (local)");
-    await loadReviews();
+    } catch (err) {
+      console.error(err);
+    }
   });
 }
 

@@ -1,5 +1,5 @@
-// server/api.reviews.js
 import express from "express";
+import { ObjectId } from "mongodb";   // ✅ make sure this is imported
 import { getDb } from "./db.js";
 
 const router = express.Router();
@@ -20,28 +20,18 @@ router.get("/:venueId", async (req, res) => {
 
 /**
  * POST /api/reviews/:venueId
- * Only if the user was served
  */
 router.post("/:venueId", async (req, res) => {
   const db = getDb();
-  const user = req.session?.user;
+  const user = req.session?.user; // ✅ you set this during login
   if (!user) return res.status(401).send("Unauthorized");
 
   const { venueId } = req.params;
   const { rating, comments } = req.body;
 
-  // Must be served first
-  const served = await db.collection("activitylog").findOne({
-    userIdStr: user.id,
-    venueIdStr: String(venueId),
-    type: "queue.served",
-  });
-  if (!served)
-    return res.status(403).send("You can review only after being served.");
-
   const now = new Date();
   await db.collection("reviews").insertOne({
-    userId: user.id,
+    userId: user.id, // ✅ same field used below in PUT check
     name: user.name || "Customer",
     venueId: String(venueId),
     rating: Number(rating) || 5,
@@ -51,6 +41,43 @@ router.post("/:venueId", async (req, res) => {
   });
 
   res.json({ ok: true });
+});
+
+/**
+ * PUT /api/reviews/:reviewId
+ */
+router.put("/:reviewId", async (req, res) => {
+  const db = getDb();
+
+  // ✅ use same session field as POST
+  const user = req.session?.user;
+  if (!user) return res.status(401).send("Unauthorized");
+
+  const { reviewId } = req.params;
+  const { rating, comments } = req.body;
+
+  const existing = await db
+    .collection("reviews")
+    .findOne({ _id: new ObjectId(reviewId) });
+
+  if (!existing) return res.status(404).send("Review not found");
+
+  // ✅ compare with same field stored in DB
+  if (String(existing.userId) !== String(user.id))
+    return res.status(403).send("Cannot edit another user's review");
+
+  await db.collection("reviews").updateOne(
+    { _id: existing._id },
+    {
+      $set: {
+        rating: Number(rating) || 5,
+        comments: comments || "",
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  res.json({ ok: true, updated: true });
 });
 
 export default router;
