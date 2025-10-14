@@ -230,33 +230,58 @@ async function loadReviews() {
               <p>${(x.comments || "")
                 .replace(/</g, "&lt;")
                 .replace(/\n/g, "<br>")}</p>
-              ${
-                isMine
-                  ? `<button class="btn small" data-edit="${x._id}" data-rate="${x.rating}" data-text="${
-                      x.comments || ""
-                    }">Edit</button>`
-                  : ""
-              }
+                ${
+                  isMine
+                    ? `
+                      <div class="review-actions">
+                        <button class="btn small" data-edit="${x._id}" data-rate="${x.rating}" data-text="${x.comments || ""}">Edit</button>
+                        <button class="btn small danger" data-delete="${x._id}">Delete</button>
+                      </div>
+                    `
+                    : ""
+                }
             </div>`;
           })
           .join("");
 
           // handle edit button clicks
-          list.addEventListener("click", (e) => {
-            const btn = e.target.closest("[data-edit]");
-            if (!btn) return;
+          list.addEventListener("click", async (e) => {
+            const btn = e.target;
 
-            // mark the review being edited
-            editingReviewId = btn.dataset.edit;
+            // edit
+            if (btn.matches("[data-edit]")) {
+              editingReviewId = btn.dataset.edit;
+              const textEl = document.getElementById("revText");
+              const ratingEl = document.getElementById("revRating");
+              textEl.value = btn.dataset.text || "";
+              ratingEl.value = btn.dataset.rate || 5;
+              textEl.focus();
+              toast("Editing your review — update and press Post!");
+              return;
+            }
 
-            // prefill the form fields
-            const textEl = document.getElementById("revText");
-            const ratingEl = document.getElementById("revRating");
-            textEl.value = btn.dataset.text || "";
-            ratingEl.value = btn.dataset.rate || 5;
-            textEl.focus();
+            // delete
+            if (btn.matches("[data-delete]")) {
+              const id = btn.dataset.delete;
+              const confirmed = confirm("Delete this review?");
+              if (!confirmed) return;
 
-            toast("Editing your review — update and press Post!");
+              try {
+                const res = await fetch(`/api/reviews/${id}`, {
+                  method: "DELETE",
+                  credentials: "include",
+                });
+                if (res.ok) {
+                  toast("Review deleted!");
+                  await loadReviews();
+                } else {
+                  toast("Failed to delete review");
+                }
+              } catch (err) {
+                console.error(err);
+                toast("Error deleting review");
+              }
+            }
           });
 
       return; // stop here (skip local fallback)

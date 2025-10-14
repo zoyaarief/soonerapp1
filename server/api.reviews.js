@@ -80,4 +80,29 @@ router.put("/:reviewId", async (req, res) => {
   res.json({ ok: true, updated: true });
 });
 
+/**
+ * DELETE /api/reviews/:reviewId
+ * Only the review’s author can delete it
+ */
+router.delete("/:reviewId", async (req, res) => {
+  const db = getDb();
+  const user = req.session?.user;
+  if (!user) return res.status(401).send("Unauthorized");
+
+  const { reviewId } = req.params;
+
+  const existing = await db
+    .collection("reviews")
+    .findOne({ _id: new ObjectId(reviewId) });
+
+  if (!existing) return res.status(404).send("Review not found");
+
+  if (String(existing.userId) !== String(user.id))
+    return res.status(403).send("Cannot delete another user's review");
+
+  await db.collection("reviews").deleteOne({ _id: existing._id });
+
+  res.json({ ok: true, deleted: true });
+});
+
 export default router;
