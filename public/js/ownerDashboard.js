@@ -129,9 +129,6 @@ document.getElementById("logoutBtn")?.addEventListener("click", async () => {
 // Controls / Announcements / Queue / Chart
 // ======================
 const walkinBtn = document.getElementById("walkinBtn");
-const openCloseBtn = document.getElementById("openCloseBtn");
-const stopQueueBtn = document.getElementById("stopQueueBtn");
-const restartQueueBtn = document.getElementById("restartQueueBtn");
 
 const announcementInput = document.getElementById("announcementInput");
 const announceBtn = document.getElementById("announceBtn");
@@ -151,7 +148,6 @@ const modalClose2 = document.getElementById("modalClose2");
 const undoList = document.getElementById("undoList");
 
 const mWalkins = document.getElementById("mWalkins");
-const mOpen = document.getElementById("mOpen");
 const mQueueCount = document.getElementById("mQueueCount");
 const mAvgWait = document.getElementById("mAvgWait");
 
@@ -164,8 +160,6 @@ let announcements = []; // server-backed
 
 let settings = {
   walkinsEnabled: false,
-  openStatus: "closed", // "open" | "closed"
-  queueActive: true,
 };
 
 let capacity = {
@@ -191,8 +185,7 @@ function showToast(message, withUndo = false) {
 }
 function updateMetrics() {
   setText(mWalkins, settings.walkinsEnabled ? "Enabled" : "Disabled");
-  setText(mOpen, settings.openStatus === "open" ? "Open" : "Closed");
-  setText(mQueueCount, String(queue.length)); // total in system
+  setText(mQueueCount, String(queue.length)); // total items in queue array
   const avg = Math.round(
     (queue.reduce((a, b) => a + (Number(b.people) || 0), 0) * 8) /
       Math.max(queue.length, 1)
@@ -254,8 +247,11 @@ async function fetchSettings() {
     const data = await res.json();
     const s = data?.settings || {};
     settings.walkinsEnabled = !!s.walkinsEnabled;
-    settings.openStatus = s.openStatus === "open" ? "open" : "closed";
-    settings.queueActive = s.queueActive !== false;
+
+    // ensure no stale flags linger in memory
+    delete settings.openStatus;
+    delete settings.queueActive;
+
     applySettingsToUI();
   } catch (e) {
     console.warn("fetchSettings error:", e);
@@ -270,30 +266,11 @@ function applySettingsToUI() {
       : "Enable Walk-ins";
   }
 
-  // Open/Close button text
-  if (openCloseBtn) {
-    openCloseBtn.textContent =
-      settings.openStatus === "open" ? "Close" : "Open";
+  // Just render capacity normally (no red “stopped” banner tied to other flags)
+  if (spotsLeftEl) {
+    spotsLeftEl.style.color = ""; // reset any previous styling
   }
-
-  // Stop/Restart visibility
-  if (stopQueueBtn && restartQueueBtn) {
-    if (settings.queueActive) {
-      stopQueueBtn.classList.remove("hidden");
-      restartQueueBtn.classList.add("hidden");
-    } else {
-      stopQueueBtn.classList.add("hidden");
-      restartQueueBtn.classList.remove("hidden");
-    }
-  }
-
-  // If queue is stopped, show notice; else show capacity
-  if (!settings.queueActive && spotsLeftEl) {
-    spotsLeftEl.textContent = "Queue stopped for the day";
-    spotsLeftEl.style.color = "#ef4444";
-  } else {
-    updateSpotsLeftUI();
-  }
+  updateSpotsLeftUI();
 
   updateMetrics();
   renderQueue();
@@ -335,11 +312,11 @@ async function fetchQueue() {
     updateSpotsLeftUI();
 
     // Settings (authoritative)
+    // Settings (authoritative)
     if (data.settings) {
       settings.walkinsEnabled = !!data.settings.walkinsEnabled;
-      settings.openStatus =
-        data.settings.openStatus === "open" ? "open" : "closed";
-      settings.queueActive = !!data.settings.queueActive;
+      delete settings.openStatus;
+      delete settings.queueActive;
     }
 
     renderQueue();
@@ -408,7 +385,7 @@ function addToUndoStack(item) {
   );
 }
 
-function renderQueue() {
+/*function renderQueue() {
   if (!queueList) return;
   queueList.innerHTML = "";
 
@@ -419,6 +396,43 @@ function renderQueue() {
     drawChart();
     return;
   }
+
+  const totalSeats = Number(capacity.totalSeats || 0);
+
+  // Only render the parties that fit entirely into totalSeats (cumulative)
+  const visible = visibleQueueByCapacity(queue, totalSeats);
+  const hiddenCount = Math.max(queue.length - visible.length, 0);
+
+  if (!visible.length) {
+    queueList.innerHTML =
+      "<p style='color:#6B7280'>No one currently in queue.</p>";
+  } else {
+    visible.forEach((q) => {
+      const row = document.createElement("div");
+      row.className = "queue-item";
+      row.innerHTML = `
+        <span>${q.position}. ${q.name} (${q.people} people)</span>
+        <input type="checkbox" class="checkbox" data-id="${q._id}" aria-label="Mark served">
+      `;
+      queueList.appendChild(row);
+    });
+
+    if (hiddenCount > 0) {
+      const more = document.createElement("div");
+      more.className = "meta";
+      more.style.cssText = "color:#6B7280;margin-top:8px;";
+      more.textContent = `…and ${hiddenCount} more waiting`;
+      queueList.appendChild(more);
+    }
+  }
+
+  updateMetrics();
+  drawChart();
+}*/
+
+function renderQueue() {
+  if (!queueList) return;
+  queueList.innerHTML = "";
 
   const totalSeats = Number(capacity.totalSeats || 0);
 
@@ -489,68 +503,6 @@ walkinBtn?.addEventListener("click", async () => {
   }
 });
 
-// Open/Close toggle
-openCloseBtn?.addEventListener("click", async () => {
-  try {
-    const next = settings.openStatus === "open" ? "closed" : "open";
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openStatus: next }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.openStatus = data.settings.openStatus;
-    applySettingsToUI();
-    showToast(
-      `Restaurant set to ${settings.openStatus === "open" ? "Open" : "Closed"}`
-    );
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to update open status");
-  }
-});
-
-// Stop / Restart (persisted)
-stopQueueBtn?.addEventListener("click", async () => {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queueActive: false }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.queueActive = !!data.settings.queueActive;
-    applySettingsToUI();
-    showToast("Queue stopped for the day");
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to stop queue");
-  }
-});
-
-restartQueueBtn?.addEventListener("click", async () => {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
-      method: "PUT",
-      credentials: FETCH_CREDENTIALS,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queueActive: true }),
-    });
-    if (!res.ok) throw new Error("settings save failed");
-    const data = await res.json();
-    settings.queueActive = !!data.settings.queueActive;
-    applySettingsToUI();
-    showToast("Queue restarted");
-  } catch (e) {
-    console.warn(e);
-    showToast("Failed to restart queue");
-  }
-});
-
 // -------------------- SSE (live queue) with polling fallback --------------------
 let es;
 function startQueueStream() {
@@ -580,9 +532,8 @@ function startQueueStream() {
       // Settings from stream (authoritative)
       if (data.settings) {
         settings.walkinsEnabled = !!data.settings.walkinsEnabled;
-        settings.openStatus =
-          data.settings.openStatus === "open" ? "open" : "closed";
-        settings.queueActive = !!data.settings.queueActive;
+        delete settings.openStatus;
+        delete settings.queueActive;
       }
 
       renderQueue();
@@ -646,7 +597,7 @@ announceList?.addEventListener("click", async (e) => {
 
 // -------------------- Queue actions (SERVER) --------------------
 queueList?.addEventListener("change", async (e) => {
-  if (e.target.matches(".checkbox") && settings.queueActive) {
+  if (e.target.matches(".checkbox")) {
     const id = e.target.dataset.id;
     try {
       const res = await fetch(`${API_BASE}/api/queue/serve`, {

@@ -233,15 +233,37 @@ async function loadReviews() {
 
 // ============== Queue actions ==============
 async function joinQueue(people) {
-  const payload = { people, partySize: people, venueId: currentId };
+  const size = Math.max(1, Math.min(12, Number(people || 1)));
+  const venueId = currentId;
+
+  // const payload = { people: size, partySize: size, venueId };
+  const payload = {
+    venueId: "68eca3fe4bc49f3b1c2ee99e",
+    userId: "68eabb67f83cd1758cbaff78",
+    name: "Jeishu",
+    email: "jeishu@example.com",
+    phone: "+1-617-555-0199",
+    partySize: 3,
+    queueMode: "fifo",
+    joinedAt: new Date().toISOString(),
+    estimatedReadyAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    arrivalDeadline: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
+    timerPaused: false,
+    status: "active",
+    notes: "Client-side seeded test",
+  };
+
   try {
-    let r = await fetch(`/api/queue/${encodeURIComponent(currentId)}/join`, {
+    // Try path-param route FIRST with the FULL payload
+    let r = await fetch(`/api/queue/${encodeURIComponent(venueId)}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ people }),
+      body: JSON.stringify(payload),
     });
-    if (r.status === 404) {
+
+    // Fallback to the body route if path one isn't mounted
+    if (r.status === 404 || r.status === 405) {
       r = await fetch(`/api/queue/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -249,20 +271,34 @@ async function joinQueue(people) {
         body: JSON.stringify(payload),
       });
     }
+
     if (r.status === 401) {
       const ret = encodeURIComponent(location.pathname + location.search);
       location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
       return;
     }
+
     if (!r.ok) {
-      toast("Failed to join queue");
+      // Surface the exact server reason so you can fix the backend state quickly
+      let msg = "Failed to join queue";
+      try {
+        const err = await r.json();
+        if (err?.error) msg = `Failed to join queue: ${err.error}`;
+      } catch {
+        try {
+          msg = `Failed to join queue: ${await r.text()}`;
+        } catch {}
+      }
+      toast(msg);
       return;
     }
+
     toast("✅ Joined queue");
     toggleQueueButtons(true);
     await refreshMetrics();
   } catch (e) {
-    toast("Failed to join queue");
+    console.error("[joinQueue] network error:", e);
+    toast("Failed to join queue (network)");
   }
 }
 
@@ -335,30 +371,34 @@ async function refreshMetrics() {
   const m = await fetchJSON(
     `/api/queue/metrics/${encodeURIComponent(currentId)}`
   );
-  if (!m) return; // keep UI as-is on failure
+  if (!m) {
+    console.warn("[metrics] no response; keeping initial disabled state");
+    return;
+  } // keep UI as-is on failure
 
   text(qs("#queueBadge"), `${m.count} in queue`);
   text(qs("#count"), m.count);
   text(qs("#wait"), m.approxWaitMins ? `${m.approxWaitMins}m` : "—");
   text(qs("#pos"), m.position ?? "—");
-  text(
-    qs("#status"),
-    m.openStatus === "open" && m.walkinsEnabled && m.queueActive
-      ? "Open"
-      : "Closed"
-  );
+  //text(qs("#status"), m.walkinsEnabled ? "true" : "false");
 
+  // Status label: base it only on walk-ins being enabled (and optional capacity)
   const seatsLeft = m.capacity && (m.capacity.spotsLeft ?? null);
   const seatsEl = qs("#seatsLeft");
   if (seatsEl) text(seatsEl, seatsLeft ?? "—");
 
   const peopleInp = qs("#people");
   const people = Number(peopleInp?.value || 2);
+
+  // capacityOK: either unlimited (null/undefined) or enough seats for this party
   const capacityOK =
     seatsLeft == null || (typeof seatsLeft === "number" && people <= seatsLeft);
-  const venueAccepting =
-    m.openStatus === "open" && m.walkinsEnabled && m.queueActive && capacityOK;
 
+  // venueAccepting is now ONLY: walk-ins enabled + capacity ok
+  const venueAccepting = !m.walkinsEnabled && capacityOK;
+
+  // Set the visible status text accordingly
+  text(qs("#status"), venueAccepting ? "Open" : "Closed");
   const inQueue = Number.isFinite(m.position);
   toggleQueueButtons(inQueue);
 
@@ -411,11 +451,41 @@ function bindUI() {
     }
     joinQueue(n);
   });
-  qs("#cancelBtn")?.addEventListener("click", cancelQueue);
-  qs("#imHere")?.addEventListener("click", arrived);
-  qs("#checkedIn")?.addEventListener("click", () =>
-    toast("Waiting for owner to mark you served")
-  );
+  // const btn = document.getElementById("enterBtn");
+  // if (!btn) return;
+
+  // btn.addEventListener("click", async () => {
+  //   const prev = btn.textContent;
+  //   btn.disabled = true;
+  //   btn.textContent = "Adding...";
+
+  //   try {
+  //     const res = await fetch("/api/queue/hardcoded", {
+  //       method: "POST",
+  //       credentials: "include",
+  //       headers: { "Content-Type": "application/json" },
+  //     });
+  //     if (!res.ok) {
+  //       const err = await res.json().catch(() => ({}));
+  //       throw new Error(err.error || "Request failed");
+  //     }
+
+  //     const data = await res.json();
+  //     console.log("Inserted:", data);
+  //     alert("You’re in! Entry ID: " + data.insertedId);
+  //   } catch (e) {
+  //     console.error(e);
+  //     alert("Sorry, could not join the queue. " + e.message);
+  //   } finally {
+  //     btn.disabled = false;
+  //     btn.textContent = prev;
+  //   }
+  // });
+  // qs("#cancelBtn")?.addEventListener("click", cancelQueue);
+  // qs("#imHere")?.addEventListener("click", arrived);
+  // qs("#checkedIn")?.addEventListener("click", () =>
+  //   toast("Waiting for owner to mark you served")
+  // );
 
   const form = document.getElementById("reviewForm");
   form?.addEventListener("submit", async (e) => {

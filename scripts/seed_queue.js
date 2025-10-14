@@ -156,8 +156,6 @@ async function ensureOwnerSettings(db, ownerIdStr) {
       $setOnInsert: {
         ownerId: ownerIdStr,
         walkinsEnabled: true,
-        openStatus: "open",
-        queueActive: true,
       },
       $set: { updatedAt: new Date() }, // only here, not also in $setOnInsert
     },

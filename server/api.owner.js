@@ -51,8 +51,8 @@ async function loadOrInitSettings(ownerId) {
   const base = {
     ownerId: oid || String(ownerId),
     walkinsEnabled: false,
-    openStatus: "closed",
-    queueActive: true,
+    //openStatus: "closed",
+    //queueActive: true,
     updatedAt: new Date(),
   };
   await Settings.updateOne(
@@ -68,39 +68,59 @@ async function loadOrInitSettings(ownerId) {
   return base;
 }
 
+// keep this as your single point of truth for settings updates
 async function updateSettings(ownerId, patch) {
   const db = getDb();
   const Settings = db.collection("owner_settings");
   const Legacy = db.collection("settings");
 
   const normalized = {};
-  if ("walkinsEnabled" in patch)
-    normalized.walkinsEnabled = !!patch.walkinsEnabled;
-  if ("queueActive" in patch) normalized.queueActive = !!patch.queueActive;
-  if ("openStatus" in patch)
-    normalized.openStatus = patch.openStatus === "open" ? "open" : "closed";
+
+  // Keep ONLY walkinsEnabled
+  if (Object.prototype.hasOwnProperty.call(patch, "walkinsEnabled")) {
+    if (typeof patch.walkinsEnabled === "boolean") {
+      normalized.walkinsEnabled = patch.walkinsEnabled;
+    }
+  }
+
+  // We explicitly ignore openStatus/queueActive if sent
+  // (Optionally: you could 400 them to catch stray callers)
+
+  if (!Object.keys(normalized).length) {
+    // Nothing to update -> return the current state
+    let oid = null;
+    try {
+      oid = new ObjectId(String(ownerId));
+    } catch {}
+    return (
+      (oid && (await Settings.findOne({ ownerId: oid }))) ||
+      (await Settings.findOne({ ownerId: String(ownerId) })) ||
+      (await Legacy.findOne({ ownerId: String(ownerId) }))
+    );
+  }
+
   normalized.updatedAt = new Date();
 
   let oid = null;
   try {
     oid = new ObjectId(String(ownerId));
   } catch {}
-
   const filters = [
     oid && { ownerId: oid },
     { ownerId: String(ownerId) },
   ].filter(Boolean);
+
   for (const f of filters) {
     await Settings.updateOne(f, { $set: normalized }, { upsert: false });
     await Legacy.updateOne(f, { $set: normalized }, { upsert: false });
   }
+
   return (
     (oid && (await Settings.findOne({ ownerId: oid }))) ||
     (await Settings.findOne({ ownerId: String(ownerId) })) ||
     (await Legacy.findOne({ ownerId: String(ownerId) }))
   );
 }
-
 // ------------------------ OWNER AUTH ------------------------
 router.post("/owners", async (req, res) => {
   try {
@@ -608,11 +628,9 @@ router.post("/queue/restore", requireOwner, async (req, res) => {
         .json({ error: "Cannot restore: userId must be an ObjectId" });
     }
     if (!isHex24(doc.venueId) || !isHex24(doc.restaurantId)) {
-      return res
-        .status(400)
-        .json({
-          error: "Cannot restore: venueId/restaurantId must be 24-hex strings",
-        });
+      return res.status(400).json({
+        error: "Cannot restore: venueId/restaurantId must be 24-hex strings",
+      });
     }
 
     // 4) Insert & cleanup
