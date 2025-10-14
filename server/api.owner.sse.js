@@ -83,6 +83,33 @@ async function loadOrInitSettings(ownerId) {
 }
 
 // ------------------------ CAPACITY CALC ------------------------
+// async function computeSpotsLeftForOwner(req) {
+//   const db = getDb();
+//   const Owners = db.collection("owners");
+//   const Queue = db.collection("queue");
+//   const ownerId = new ObjectId(req.session.ownerId);
+
+//   const owner = await Owners.findOne(
+//     { _id: ownerId },
+//     { projection: { "profile.totalSeats": 1 } }
+//   );
+//   const totalSeats = Number(owner?.profile?.totalSeats || 0);
+
+//   const filter = await buildQueueFilterForOwner(req);
+//   const items = await Queue.find(filter)
+//     .sort({ position: 1, joinedAt: 1 })
+//     .project({ partySize: 1 })
+//     .toArray();
+
+//   let used = 0;
+//   for (const it of items) {
+//     const size = Number(it.partySize || it.people || 0);
+//     if (used + size <= totalSeats) used += size;
+//     else break;
+//   }
+//   const left = totalSeats > 0 ? Math.max(totalSeats - used, 0) : Infinity;
+//   return { totalSeats, used, left };
+// }
 async function computeSpotsLeftForOwner(req) {
   const db = getDb();
   const Owners = db.collection("owners");
@@ -96,16 +123,19 @@ async function computeSpotsLeftForOwner(req) {
   const totalSeats = Number(owner?.profile?.totalSeats || 0);
 
   const filter = await buildQueueFilterForOwner(req);
-  const items = await Queue.find(filter)
-    .sort({ position: 1, joinedAt: 1 })
-    .project({ partySize: 1 })
+  const items = await Queue.find({
+    ...filter,
+    status: { $in: ["waiting", "active"] },
+  })
+    .sort({ order: 1, joinedAt: 1, _id: 1 })
+    .project({ partySize: 1, people: 1 })
     .toArray();
 
   let used = 0;
   for (const it of items) {
     const size = Number(it.partySize || it.people || 0);
-    if (used + size <= totalSeats) used += size;
-    else break;
+    if (totalSeats > 0 && used + size > totalSeats) break;
+    used += size;
   }
   const left = totalSeats > 0 ? Math.max(totalSeats - used, 0) : Infinity;
   return { totalSeats, used, left };
@@ -121,25 +151,27 @@ router.get("/queue/stream", requireOwner, async (req, res) => {
   const sendSnapshot = async () => {
     try {
       const filter = await buildQueueFilterForOwner(req);
-      const items = await Queue.find(filter)
-        .sort({ position: 1, joinedAt: 1 })
+      const items = await Queue.find({
+        ...filter,
+        status: { $in: ["waiting", "active"] },
+      })
+        .sort({ order: 1, joinedAt: 1, _id: 1 })
         .toArray();
+
       const capacity = await computeSpotsLeftForOwner(req);
       const settings = await loadOrInitSettings(req.session.ownerId);
 
       sseSend(res, "snapshot", {
-        // queue items in the shape the UI expects
-        queue: items.map((x) => ({
+        queue: items.map((x, i) => ({
           _id: String(x._id),
           name: x.name || "Guest",
           email: x.email || "",
           phone: x.phone || "",
           people: x.people || x.partySize || 1,
-          position: x.position || x.order || 0,
+          position: i + 1, // derived live position
           status: x.status || "waiting",
-          order: x.order || 0,
+          order: x.order ?? i + 1,
         })),
-        // keep both "capacity" and top-level mirrors for the dashboard
         capacity,
         totalSeats: capacity.totalSeats,
         seatsUsed: capacity.used,

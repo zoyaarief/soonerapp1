@@ -536,6 +536,83 @@ async function loadReviews() {
   }
 }
 
+// async function joinQueue(people) {
+//   const size = Math.max(1, Math.min(12, Number(people || 1)));
+//   const venueId = currentId;
+
+//   if (!venueId) {
+//     toast("Missing place ID");
+//     return;
+//   }
+
+//   // pull the logged-in customer from backend
+//   const meResp = await fetch("/api/customers/me", { credentials: "include" });
+//   if (meResp.status === 401) {
+//     const ret = encodeURIComponent(location.pathname + location.search);
+//     location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+//     return;
+//   }
+//   if (!meResp.ok) {
+//     toast("Could not load your profile");
+//     return;
+//   }
+//   const me = await meResp.json();
+
+//   // minimal payload: venue from page, user from session (customers collection)
+//   const payload = {
+//     venueId, // owner/venue ObjectId from the page (?id=)
+//     userId: String(me.id), // customer _id
+//     name: me.name || "Customer",
+//     email: me.email || "",
+//     partySize: size,
+//     status: "active",
+//   };
+
+//   try {
+//     // try path-param route first
+//     let r = await fetch(`/api/queue/${encodeURIComponent(venueId)}/join`, {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       credentials: "include",
+//       body: JSON.stringify(payload),
+//     });
+
+//     // fallback to body route if the above isn't mounted
+//     if (r.status === 404 || r.status === 405) {
+//       r = await fetch(`/api/queue/join`, {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         credentials: "include",
+//         body: JSON.stringify(payload),
+//       });
+//     }
+
+//     if (r.status === 401) {
+//       const ret = encodeURIComponent(location.pathname + location.search);
+//       location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+//       return;
+//     }
+
+//     if (!r.ok) {
+//       let msg = "Failed to join queue";
+//       try {
+//         const err = await r.json();
+//         if (err?.error) msg = `Failed to join queue: ${err.error}`;
+//       } catch {}
+//       toast(msg);
+//       return;
+//     }
+
+//     toast("✅ Joined queue");
+//     toggleQueueButtons(true);
+//     await refreshMetrics();
+//     startCountdownIfNeeded(); // optional: start local timer right away
+//   } catch (e) {
+//     console.error("[joinQueue] network error:", e);
+//     toast("Failed to join queue (network)");
+//   }
+// }
+
 async function joinQueue(people) {
   const size = Math.max(1, Math.min(12, Number(people || 1)));
   const venueId = currentId;
@@ -545,7 +622,7 @@ async function joinQueue(people) {
     return;
   }
 
-  // pull the logged-in customer from backend
+  // Require a logged-in customer
   const meResp = await fetch("/api/customers/me", { credentials: "include" });
   if (meResp.status === 401) {
     const ret = encodeURIComponent(location.pathname + location.search);
@@ -558,10 +635,12 @@ async function joinQueue(people) {
   }
   const me = await meResp.json();
 
-  // minimal payload: venue from page, user from session (customers collection)
+  // Robust userId normalization (handles ObjectId objects/strings)
+  const userId = getId(me.id) || getId(me._id) || "";
+
   const payload = {
-    venueId, // owner/venue ObjectId from the page (?id=)
-    userId: String(me.id), // customer _id
+    venueId,
+    userId,
     name: me.name || "Customer",
     email: me.email || "",
     partySize: size,
@@ -569,7 +648,7 @@ async function joinQueue(people) {
   };
 
   try {
-    // try path-param route first
+    // Try path-param route first
     let r = await fetch(`/api/queue/${encodeURIComponent(venueId)}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -577,7 +656,7 @@ async function joinQueue(people) {
       body: JSON.stringify(payload),
     });
 
-    // fallback to body route if the above isn't mounted
+    // Fallback to body route
     if (r.status === 404 || r.status === 405) {
       r = await fetch(`/api/queue/join`, {
         method: "POST",
@@ -606,13 +685,40 @@ async function joinQueue(people) {
     toast("✅ Joined queue");
     toggleQueueButtons(true);
     await refreshMetrics();
-    startCountdownIfNeeded(); // optional: start local timer right away
+    startCountdownIfNeeded();
   } catch (e) {
     console.error("[joinQueue] network error:", e);
     toast("Failed to join queue (network)");
   }
 }
 
+// async function cancelQueue() {
+//   try {
+//     let r = await fetch(`/api/queue/${encodeURIComponent(currentId)}/cancel`, {
+//       method: "POST",
+//       credentials: "include",
+//     });
+//     if (r.status === 404) {
+//       r = await fetch(`/api/queue/cancel`, {
+//         method: "POST",
+//         credentials: "include",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ venueId: currentId }),
+//       });
+//     }
+//     if (!r.ok) {
+//       toast("Failed to cancel");
+//       return;
+//     }
+//     toast("❌ You left the queue");
+//     clearTimerState();
+//     hideTimer();
+//     toggleQueueButtons(false);
+//     await refreshMetrics();
+//   } catch (e) {
+//     toast("Failed to cancel");
+//   }
+// }
 async function cancelQueue() {
   try {
     let r = await fetch(`/api/queue/${encodeURIComponent(currentId)}/cancel`, {
@@ -631,7 +737,12 @@ async function cancelQueue() {
       toast("Failed to cancel");
       return;
     }
-    toast("❌ You left the queue");
+    let msg = "❌ You left the queue";
+    try {
+      const j = await r.json();
+      if (j?.already) msg = "ℹ️ You were not in this queue";
+    } catch {}
+    toast(msg);
     clearTimerState();
     hideTimer();
     toggleQueueButtons(false);
@@ -678,6 +789,76 @@ function stopPolling() {
   }
 }
 
+// async function refreshMetrics() {
+//   const m = await fetchJSON(
+//     `/api/queue/metrics/${encodeURIComponent(currentId)}`
+//   );
+//   if (!m) {
+//     console.warn("[metrics] no response; keeping initial disabled state");
+//     return;
+//   } // keep UI as-is on failure
+
+//   text(qs("#queueBadge"), `${m.count} in queue`);
+//   text(qs("#count"), m.count);
+//   text(qs("#wait"), m.approxWaitMins ? `${m.approxWaitMins}m` : "—");
+//   text(qs("#pos"), m.position ?? "—");
+//   //text(qs("#status"), m.walkinsEnabled ? "true" : "false");
+
+//   // Status label: base it only on walk-ins being enabled (and optional capacity)
+//   const seatsLeft = m.capacity && (m.capacity.spotsLeft ?? null);
+//   const seatsEl = qs("#seatsLeft");
+//   if (seatsEl) text(seatsEl, seatsLeft ?? "—");
+
+//   const peopleInp = qs("#people");
+//   const people = Number(peopleInp?.value || 2);
+
+//   // capacityOK: either unlimited (null/undefined) or enough seats for this party
+//   const capacityOK =
+//     seatsLeft == null || (typeof seatsLeft === "number" && people <= seatsLeft);
+
+//   // venueAccepting is now ONLY: walk-ins enabled + capacity ok
+//   const venueAccepting = !m.walkinsEnabled && capacityOK;
+
+//   // Set the visible status text accordingly
+//   text(qs("#status"), venueAccepting ? "Open" : "Closed");
+//   const inQueue = Number.isFinite(m.position);
+//   toggleQueueButtons(inQueue);
+
+//   if (inQueue) {
+//     setEnterBtnState({
+//       label: "Enter queue",
+//       disabled: false,
+//       showPeople: false,
+//     });
+//   } else {
+//     if (venueAccepting)
+//       setEnterBtnState({
+//         label: "Enter queue",
+//         disabled: false,
+//         showPeople: true,
+//       });
+//     else
+//       setEnterBtnState({
+//         label: "Queue Unavailable",
+//         disabled: true,
+//         showPeople: false,
+//       });
+//   }
+
+//   // Timer rules
+//   if (!inQueue) {
+//     hideTimer();
+//     clearTimerState();
+//   } else {
+//     if (m.position <= 5) startCountdownIfNeeded();
+//     else {
+//       if (timerState.startedAt) startCountdownIfNeeded();
+//       else hideTimer();
+//     }
+//   }
+// }
+
+// ============== Bind UI & Init ==============
 async function refreshMetrics() {
   const m = await fetchJSON(
     `/api/queue/metrics/${encodeURIComponent(currentId)}`
@@ -685,31 +866,33 @@ async function refreshMetrics() {
   if (!m) {
     console.warn("[metrics] no response; keeping initial disabled state");
     return;
-  } // keep UI as-is on failure
+  }
 
+  // Basic numbers
   text(qs("#queueBadge"), `${m.count} in queue`);
   text(qs("#count"), m.count);
   text(qs("#wait"), m.approxWaitMins ? `${m.approxWaitMins}m` : "—");
   text(qs("#pos"), m.position ?? "—");
-  //text(qs("#status"), m.walkinsEnabled ? "true" : "false");
 
-  // Status label: base it only on walk-ins being enabled (and optional capacity)
+  // Capacity display
   const seatsLeft = m.capacity && (m.capacity.spotsLeft ?? null);
   const seatsEl = qs("#seatsLeft");
   if (seatsEl) text(seatsEl, seatsLeft ?? "—");
 
+  // Party size from the UI (for simple capacity check)
   const peopleInp = qs("#people");
   const people = Number(peopleInp?.value || 2);
 
-  // capacityOK: either unlimited (null/undefined) or enough seats for this party
+  // capacityOK: unlimited (null/undefined) OR enough seats for this party
   const capacityOK =
     seatsLeft == null || (typeof seatsLeft === "number" && people <= seatsLeft);
 
-  // venueAccepting is now ONLY: walk-ins enabled + capacity ok
-  const venueAccepting = !m.walkinsEnabled && capacityOK;
+  // ✅ Correct logic: "Open" only if walk-ins are enabled AND capacity is OK
+  const venueAccepting = !!m.walkinsEnabled && capacityOK;
 
-  // Set the visible status text accordingly
+  // Status + buttons
   text(qs("#status"), venueAccepting ? "Open" : "Closed");
+
   const inQueue = Number.isFinite(m.position);
   toggleQueueButtons(inQueue);
 
@@ -720,18 +903,19 @@ async function refreshMetrics() {
       showPeople: false,
     });
   } else {
-    if (venueAccepting)
+    if (venueAccepting) {
       setEnterBtnState({
         label: "Enter queue",
         disabled: false,
         showPeople: true,
       });
-    else
+    } else {
       setEnterBtnState({
         label: "Queue Unavailable",
         disabled: true,
         showPeople: false,
       });
+    }
   }
 
   // Timer rules
@@ -747,7 +931,6 @@ async function refreshMetrics() {
   }
 }
 
-// ============== Bind UI & Init ==============
 function bindUI() {
   qs("#enterBtn")?.addEventListener("click", () => {
     const el = qs("#people");

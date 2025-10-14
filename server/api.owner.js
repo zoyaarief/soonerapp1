@@ -5,6 +5,17 @@ import { ObjectId } from "mongodb";
 import { getDb } from "./db.js";
 
 const router = express.Router();
+async function nextOrderOwner(db, venueIdAny) {
+  const key = `seq:order:${String(venueIdAny)}`;
+  const r = await db
+    .collection("settings")
+    .findOneAndUpdate(
+      { _id: key },
+      { $inc: { value: 1 }, $setOnInsert: { ownerId: key } },
+      { upsert: true, returnDocument: "after" }
+    );
+  return r.value?.value || 1;
+}
 
 // ------------------------ TYPE HELPERS (new) ------------------------
 const asObjectId = (v) => {
@@ -396,6 +407,68 @@ async function buildQueueFilterForOwner(req) {
   };
 }
 
+// router.get("/queue", requireOwner, async (req, res) => {
+//   try {
+//     const db = getDb();
+//     const Queue = db.collection("queue");
+//     const Settings = db.collection("owner_settings");
+//     const Owners = db.collection("owners");
+
+//     const filter = await buildQueueFilterForOwner(req);
+//     const list = await Queue.find(filter)
+//       .sort({ position: 1, joinedAt: 1 })
+//       .toArray();
+
+//     const owner = await Owners.findOne(
+//       { _id: new ObjectId(req.session.ownerId) },
+//       { projection: { "profile.totalSeats": 1 } }
+//     );
+//     const totalSeats = Number(owner?.profile?.totalSeats || 0);
+
+//     let used = 0;
+//     for (const it of list) {
+//       const size = Number(it.people || it.partySize || 0);
+//       if (totalSeats > 0 && used + size > totalSeats) break;
+//       used += size;
+//     }
+//     const spotsLeft = totalSeats ? Math.max(totalSeats - used, 0) : Infinity;
+
+//     const s = (await Settings.findOne({
+//       ownerId: new ObjectId(req.session.ownerId),
+//     })) ||
+//       (await Settings.findOne({ ownerId: String(req.session.ownerId) })) || {
+//         walkinsEnabled: false,
+//         openStatus: "closed",
+//         queueActive: true,
+//       };
+
+//     res.json({
+//       ok: true,
+//       queue: list.map((x) => ({
+//         _id: String(x._id),
+//         name: x.name || "Guest",
+//         email: x.email || "",
+//         phone: x.phone || "",
+//         people: x.people || x.partySize || 1,
+//         position: x.position || x.order || 0,
+//         status: x.status || "waiting",
+//       })),
+//       totalSeats,
+//       seatsUsed: used,
+//       spotsLeft,
+//       settings: {
+//         walkinsEnabled: !!s.walkinsEnabled,
+//         openStatus: s.openStatus === "open" ? "open" : "closed",
+//         queueActive: !!s.queueActive,
+//       },
+//     });
+//   } catch (e) {
+//     console.error("GET /api/queue error:", e);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// ------------------------ Mark served → move to queue_pending (Undo window) ------------------------
 router.get("/queue", requireOwner, async (req, res) => {
   try {
     const db = getDb();
@@ -404,10 +477,16 @@ router.get("/queue", requireOwner, async (req, res) => {
     const Owners = db.collection("owners");
 
     const filter = await buildQueueFilterForOwner(req);
-    const list = await Queue.find(filter)
-      .sort({ position: 1, joinedAt: 1 })
+
+    // Only live entries, sorted by FCFS (order, then joinedAt, then _id)
+    const list = await Queue.find({
+      ...filter,
+      status: { $in: ["waiting", "active"] },
+    })
+      .sort({ order: 1, joinedAt: 1, _id: 1 })
       .toArray();
 
+    // Capacity (from owner profile)
     const owner = await Owners.findOne(
       { _id: new ObjectId(req.session.ownerId) },
       { projection: { "profile.totalSeats": 1 } }
@@ -422,6 +501,7 @@ router.get("/queue", requireOwner, async (req, res) => {
     }
     const spotsLeft = totalSeats ? Math.max(totalSeats - used, 0) : Infinity;
 
+    // Settings
     const s = (await Settings.findOne({
       ownerId: new ObjectId(req.session.ownerId),
     })) ||
@@ -431,16 +511,18 @@ router.get("/queue", requireOwner, async (req, res) => {
         queueActive: true,
       };
 
+    // Derive live position as i+1 from the sorted list
     res.json({
       ok: true,
-      queue: list.map((x) => ({
+      queue: list.map((x, i) => ({
         _id: String(x._id),
         name: x.name || "Guest",
         email: x.email || "",
         phone: x.phone || "",
         people: x.people || x.partySize || 1,
-        position: x.position || x.order || 0,
+        position: i + 1,
         status: x.status || "waiting",
+        order: x.order ?? i + 1, // optional for debugging
       })),
       totalSeats,
       seatsUsed: used,
@@ -457,7 +539,6 @@ router.get("/queue", requireOwner, async (req, res) => {
   }
 });
 
-// ------------------------ Mark served → move to queue_pending (Undo window) ------------------------
 router.post("/queue/serve", requireOwner, async (req, res) => {
   try {
     const db = getDb();
@@ -520,6 +601,9 @@ router.post("/queue/serve", requireOwner, async (req, res) => {
     );
 
     await Queue.deleteOne({ _id: doc._id });
+    try {
+      await reindexPositions(db, doc.venueId || req.session.ownerId);
+    } catch {}
 
     res.json({
       ok: true,
@@ -542,6 +626,31 @@ router.post("/queue/serve", requireOwner, async (req, res) => {
   }
 });
 
+async function reindexPositions(db, venueIdAny) {
+  const Queue = db.collection("queue");
+  const vStr = String(venueIdAny);
+  const vOID = ObjectId.isValid(vStr) ? new ObjectId(vStr) : null;
+
+  const match = {
+    status: { $in: ["waiting", "active"] },
+    $or: [{ venueId: vStr }].concat(vOID ? [{ venueId: vOID }] : []),
+  };
+
+  const list = await Queue.find(match)
+    .sort({ order: 1, joinedAt: 1, _id: 1 })
+    .project({ _id: 1 })
+    .toArray();
+  if (!list.length) return;
+
+  const ops = list.map((d, i) => ({
+    updateOne: {
+      filter: { _id: d._id },
+      update: { $set: { position: i + 1, updatedAt: new Date() } },
+    },
+  }));
+  await Queue.bulkWrite(ops, { ordered: false });
+}
+
 // Undo (restore from queue_pending back to queue)
 router.post("/queue/restore", requireOwner, async (req, res) => {
   try {
@@ -561,11 +670,13 @@ router.post("/queue/restore", requireOwner, async (req, res) => {
     if (!pend) return res.status(404).json({ error: "Undo window expired" });
 
     // --- helpers ---
+
     const isHex24 = (s) => typeof s === "string" && /^[0-9a-fA-F]{24}$/.test(s);
     const asIntMin1 = (v, d = 1) => {
       const n = Math.floor(Number(v));
       return Number.isFinite(n) && n >= 1 ? n : d;
     };
+
     const toDateOrOmit = (d) => (d ? new Date(d) : undefined);
     const validEmail = (s) =>
       typeof s === "string" &&
@@ -636,6 +747,9 @@ router.post("/queue/restore", requireOwner, async (req, res) => {
     // 4) Insert & cleanup
     await Queue.insertOne(doc);
     await Pending.deleteOne({ _id });
+    try {
+      await reindexPositions(db, doc.venueId);
+    } catch {}
 
     // 5) best-effort activity
     try {
@@ -668,30 +782,65 @@ router.post("/queue/restore", requireOwner, async (req, res) => {
 });
 
 // ------------------------ PUBLIC JOIN QUEUE ------------------------
+// router.post("/public/queue", async (req, res) => {
+//   try {
+//     const db = getDb();
+//     const { ownerId, name, email, phone, partySize } = req.body || {};
+//     if (!ownerId) return res.status(400).json({ error: "Missing ownerId" });
+//     const count = Math.max(1, Math.min(12, Number(partySize) || 1));
+//     const doc = {
+//       venueId: ObjectId.isValid(ownerId)
+//         ? new ObjectId(ownerId)
+//         : String(ownerId),
+//       restaurantId: ObjectId.isValid(ownerId)
+//         ? new ObjectId(ownerId)
+//         : String(ownerId),
+//       name: name?.trim() || "Guest",
+//       email: email?.trim() || "",
+//       phone: phone?.trim() || "",
+//       partySize: count,
+//       people: count,
+//       status: "waiting",
+//       position: 0,
+//       order: 0,
+//       joinedAt: new Date(),
+//       createdAt: new Date(),
+//     };
+//     const r = await db.collection("queue").insertOne(doc);
+//     res.status(201).json({ ok: true, id: String(r.insertedId) });
+//   } catch (e) {
+//     console.error("Public queue error", e);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 router.post("/public/queue", async (req, res) => {
   try {
     const db = getDb();
     const { ownerId, name, email, phone, partySize } = req.body || {};
     if (!ownerId) return res.status(400).json({ error: "Missing ownerId" });
+
     const count = Math.max(1, Math.min(12, Number(partySize) || 1));
+    const ord = await nextOrderOwner(db, ownerId);
+
+    const venueId = ObjectId.isValid(ownerId)
+      ? new ObjectId(ownerId)
+      : String(ownerId);
+
     const doc = {
-      venueId: ObjectId.isValid(ownerId)
-        ? new ObjectId(ownerId)
-        : String(ownerId),
-      restaurantId: ObjectId.isValid(ownerId)
-        ? new ObjectId(ownerId)
-        : String(ownerId),
+      venueId,
+      restaurantId: venueId,
       name: name?.trim() || "Guest",
       email: email?.trim() || "",
       phone: phone?.trim() || "",
       partySize: count,
       people: count,
       status: "waiting",
-      position: 0,
-      order: 0,
+      order: ord,
+      position: ord, // initial, UI will still derive live position
       joinedAt: new Date(),
       createdAt: new Date(),
     };
+
     const r = await db.collection("queue").insertOne(doc);
     res.status(201).json({ ok: true, id: String(r.insertedId) });
   } catch (e) {

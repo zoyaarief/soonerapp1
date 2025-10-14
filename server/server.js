@@ -73,6 +73,12 @@ connectToDb()
     db.collection("settings")
       .createIndex({ ownerId: 1 }, { unique: true })
       .catch(() => {});
+    db.collection("queue")
+      .createIndex({ venueId: 1, status: 1, customerId: 1 })
+      .catch(() => {});
+    db.collection("queue")
+      .createIndex({ venueId: 1, status: 1, userId: 1 })
+      .catch(() => {});
 
     // ---- Sessions (Mongo-backed)
     const client = await getClient();
