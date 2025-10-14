@@ -192,10 +192,12 @@ api.post("/customers/update", async (req, res) => {
     return res.status(401).json({ error: "Not authenticated" });
   const db = getDb();
   const { name, phone } = req.body;
-  await db.collection("customers").updateOne(
-    { _id: new ObjectId(req.session.customerId) },
-    { $set: { name, phone } }
-  );
+  await db
+    .collection("customers")
+    .updateOne(
+      { _id: new ObjectId(req.session.customerId) },
+      { $set: { name, phone } }
+    );
   res.json({ ok: true });
 });
 
