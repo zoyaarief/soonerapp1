@@ -101,7 +101,7 @@ Sooner is a web application that replaces physical walk‑in lines with a **virt
 
 **Place**
 ```
-Cover   Name  ⭐  City • $$    [♡]
+Cover   Name  City • $$    [♡]
 Chips: Cuisine • N in queue
 Announcement (optional)
 Live Queue: Count • ETA • Your Position
