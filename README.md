@@ -187,6 +187,9 @@ Customer Password : test1234
  <img width="1709" height="935" alt="Screenshot 2025-10-15 at 12 52 30 AM" src="https://github.com/user-attachments/assets/74dc2c92-48f5-4ea6-9ec1-0dda48a7f03d" />
 
  ## Links 
+
+ Deployment Link : 
+ 
  Video : 
 
  PPT : https://docs.google.com/presentation/d/1cVWZcI5oWXF61Pi0T7_qGKIw4BhI1c3W64k8r-3LHjQ/edit?slide=id.g38c488987de_0_1#slide=id.g38c488987de_0_1
