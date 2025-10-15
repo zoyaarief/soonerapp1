@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import likesApi from "./api.likes.js";
 import reviewsApi from "./api.reviews.js";
 import historyApi from "./api.history.js";
+import { notifyUserOnJoin, venueDisplayName } from "./notify.js";
 
 // Small helpers to keep code cleaner
 function idVariantsForQuery(rawId) {
@@ -1445,6 +1446,25 @@ async function enqueue(req, res) {
       (x) => String(x._id) === String(ins.insertedId)
     );
     const position = idx >= 0 ? idx + 1 : null;
+
+    // Resolve a human venue name then notify
+    let venueName = "Sooner Venue";
+    try {
+      const vQuery = ObjectId.isValid(String(venueId))
+        ? { _id: new ObjectId(String(venueId)) }
+        : { _id: String(venueId) };
+      const venue = await db
+        .collection("owners")
+        .findOne(vQuery, { projection: { business: 1, "profile.displayName": 1 } });
+      venueName = venueDisplayName(venue);
+    } catch {}
+
+    await notifyUserOnJoin({
+      email: doc.email,
+      phone: doc.phone,
+      name: doc.name,
+      venueName,
+    });
 
     return res.json({
       ok: true,

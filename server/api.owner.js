@@ -842,6 +842,26 @@ router.post("/public/queue", async (req, res) => {
     };
 
     const r = await db.collection("queue").insertOne(doc);
+
+// Look up venue (owner) for a friendly name and notify
+let venueName = "Sooner Venue";
+try {
+  const vQuery = ObjectId.isValid(String(venueId))
+    ? { _id: new ObjectId(String(venueId)) }
+    : { _id: String(venueId) };
+  const venue = await db
+    .collection("owners")
+    .findOne(vQuery, { projection: { business: 1, "profile.displayName": 1 } });
+  venueName = venueDisplayName(venue);
+} catch {}
+
+await notifyUserOnJoin({
+  email: doc.email,
+  phone: doc.phone,
+  name: doc.name,
+  venueName,
+});
+
     res.status(201).json({ ok: true, id: String(r.insertedId) });
   } catch (e) {
     console.error("Public queue error", e);
