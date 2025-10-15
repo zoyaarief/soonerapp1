@@ -141,7 +141,10 @@ function buildCard(p) {
 }
 
 // --------- API base (fixed) ---------
-const API_BASE = "http://localhost:3000";
+// const API_BASE = "http://localhost:3000";
+const API_BASE = window.location.origin;
+const FETCH_CREDENTIALS = "same-origin";
+
 
 // Load with filters
 async function load() {
