@@ -8,6 +8,16 @@ import reviewsApi from "./api.reviews.js";
 import historyApi from "./api.history.js";
 import { notifyUserOnJoin, venueDisplayName } from "./notify.js";
 
+function venueMatch(raw) {
+  const s = String(raw);
+  const ors = [{ venueId: s }, { restaurantId: s }];
+  if (ObjectId.isValid(s)) {
+    const oid = new ObjectId(s);
+    ors.push({ venueId: oid }, { restaurantId: oid });
+  }
+  return { $or: ors };
+}
+
 // Small helpers to keep code cleaner
 function idVariantsForQuery(rawId) {
   const s = String(rawId);
@@ -1582,41 +1592,166 @@ api.post("/queue/cancel", async (req, res) => {
 //   }
 // }
 
+// async function cancelEnqueue(req, res) {
+//   try {
+//     const db = getDb();
+//     const customerId = req.session?.customerId;
+//     if (!customerId) return http401(res);
+
+//     const venueId = asId(req.body?.venueId);
+//     if (!venueId) return http400(res, "venueId is required");
+
+//     const q = await db.collection("queue").findOne({
+//       venueId,
+//       status: { $in: ["waiting", "active"] },
+//       $or: idVariantsForQuery(customerId),
+//     });
+
+//     if (!q) {
+//       // Idempotent: nothing to cancel is still success
+//       return res.json({ ok: true, already: true });
+//     }
+
+//     await db
+//       .collection("queue")
+//       .updateOne(
+//         { _id: q._id },
+//         { $set: { status: "cancelled", cancelledAt: new Date() } }
+//       );
+
+//     await db.collection("activitylog").insertOne({
+//       customerId: String(customerId),
+//       venueId,
+//       action: "cancelled",
+//       createdAt: new Date(),
+//     });
+
+//     return res.json({ ok: true });
+//   } catch (err) {
+//     console.error("CANCEL error:", err);
+//     return res.status(500).json({ error: "Server error" });
+//   }
+// }
+// async function cancelEnqueue(req, res) {
+//   try {
+//     const db = getDb();
+//     const customerId = req.session?.customerId;
+//     if (!customerId) return http401(res);
+
+//     const rawVenueId = req.body?.venueId;
+//     if (!rawVenueId) return http400(res, "venueId is required");
+
+//     const vStr = String(rawVenueId);
+//     const vOID = ObjectId.isValid(vStr) ? new ObjectId(vStr) : null;
+
+//     // Match *either* string or ObjectId forms of venueId
+//     const venueFilter = {
+//       $or: [{ venueId: rawVenueId }, { venueId: vStr }].concat(
+//         vOID ? [{ venueId: vOID }] : []
+//       ),
+//     };
+
+//     const q = await db.collection("queue").findOne({
+//       ...venueFilter,
+//       status: { $in: ["waiting", "active"] },
+//       $or: idVariantsForQuery(customerId),
+//     });
+
+//     if (!q) {
+//       // Idempotent success if nothing to cancel
+//       return res.json({ ok: true, already: true });
+//     }
+
+//     await db
+//       .collection("queue")
+//       .updateOne(
+//         { _id: q._id },
+//         { $set: { status: "cancelled", cancelledAt: new Date() } }
+//       );
+
+//     // Best-effort logging (don’t convert success into 500)
+//     try {
+//       await db.collection("activitylog").insertOne({
+//         type: "queue.cancelled",
+//         action: "cancelled",
+//         customerId: String(customerId),
+//         venueIdStr: vStr,
+//         venueId: vOID ?? undefined,
+//         createdAt: new Date(),
+//       });
+//     } catch (logErr) {
+//       console.warn("activitylog insert skipped:", logErr?.message || logErr);
+//     }
+
+//     return res.json({ ok: true });
+//   } catch (err) {
+//     console.error("CANCEL error:", err);
+//     return res.status(500).json({ error: "Server error" });
+//   }
+// }
 async function cancelEnqueue(req, res) {
   try {
     const db = getDb();
     const customerId = req.session?.customerId;
     if (!customerId) return http401(res);
 
-    const venueId = asId(req.body?.venueId);
-    if (!venueId) return http400(res, "venueId is required");
+    const rawVenueId = req.body?.venueId;
+    if (!rawVenueId) return http400(res, "venueId is required");
 
+    // Find the live entry for this user at this venue (supports string/ObjectId + venueId/restaurantId)
     const q = await db.collection("queue").findOne({
-      venueId,
+      ...venueMatch(rawVenueId),
       status: { $in: ["waiting", "active"] },
       $or: idVariantsForQuery(customerId),
     });
 
-    if (!q) {
-      // Idempotent: nothing to cancel is still success
-      return res.json({ ok: true, already: true });
+    if (!q) return res.json({ ok: true, already: true });
+
+    // HARD DELETE
+    await db.collection("queue").deleteOne({ _id: q._id });
+
+    // (Optional) reindex live positions so any stored `position` stays tidy
+    try {
+      const key = q.venueId ?? q.restaurantId ?? rawVenueId;
+      const live = await db
+        .collection("queue")
+        .find({
+          $or: [{ venueId: key }, { restaurantId: key }],
+          status: { $in: ["waiting", "active"] },
+        })
+        .sort({ order: 1, joinedAt: 1, _id: 1 })
+        .project({ _id: 1 })
+        .toArray();
+      if (live.length) {
+        const ops = live.map((d, i) => ({
+          updateOne: {
+            filter: { _id: d._id },
+            update: { $set: { position: i + 1, updatedAt: new Date() } },
+          },
+        }));
+        await db.collection("queue").bulkWrite(ops, { ordered: false });
+      }
+    } catch (e) {
+      console.warn("reindex skipped:", e?.message || e);
     }
 
-    await db
-      .collection("queue")
-      .updateOne(
-        { _id: q._id },
-        { $set: { status: "cancelled", cancelledAt: new Date() } }
-      );
+    // Best-effort activity log (never fail the request)
+    try {
+      await db.collection("activitylog").insertOne({
+        type: "queue.cancelled",
+        action: "cancelled",
+        customerId: String(customerId),
+        venueIdStr: String(rawVenueId),
+        venueId: ObjectId.isValid(String(rawVenueId))
+          ? new ObjectId(String(rawVenueId))
+          : undefined,
+        createdAt: new Date(),
+      });
+    } catch (logErr) {
+      console.warn("activitylog insert skipped:", logErr?.message || logErr);
+    }
 
-    await db.collection("activitylog").insertOne({
-      customerId: String(customerId),
-      venueId,
-      action: "cancelled",
-      createdAt: new Date(),
-    });
-
-    return res.json({ ok: true });
+    return res.json({ ok: true, deleted: String(q._id) });
   } catch (err) {
     console.error("CANCEL error:", err);
     return res.status(500).json({ error: "Server error" });
