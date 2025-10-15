@@ -159,7 +159,7 @@ let queue = [];
 let announcements = []; // server-backed
 
 let settings = {
-  walkinsEnabled: false,
+  walkinsEnabled: true,
 };
 
 let capacity = {
