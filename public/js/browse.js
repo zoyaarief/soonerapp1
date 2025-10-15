@@ -206,7 +206,9 @@ async function load() {
           <h3>${p.name}</h3>
           <div class="meta">⭐ ${p.rating ?? "—"} · ${p.city || ""}</div>
           <p class="muted">${p.cuisine || ""}</p>
-          <button data-id="${p._id}">View Details</button>
+          <button class="btn btn--sm btn--primary view-btn" data-id="${p._id}">
+  View details
+</button>
         </div>`;
       card.querySelector("button").addEventListener("click", () => {
         location.href = `place.html?id=${encodeURIComponent(p._id)}`;

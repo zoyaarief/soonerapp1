@@ -458,3 +458,99 @@ body {
     padding: 0.7rem 1rem;
   } /* bigger tap targets on phones */
 }
+
+/* === Add these tokens (safe to duplicate) === */
+:root {
+  --primary: #ffe08a;
+  --primary-ink: #1f2937;
+  --stroke: #ece8dd;
+  --shadow: 0 10px 30px rgba(31, 41, 55, 0.08);
+}
+
+/* === Unified button style (matches dashboard .btn) === */
+.btn,
+.btn-primary,
+.cta {
+  all: unset;
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+
+  background: var(--primary);
+  color: var(--primary-ink);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+
+  padding: 0.75rem 1.1rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    transform 0.06s ease;
+}
+
+.btn:hover,
+.btn-primary:hover,
+.cta:hover {
+  filter: brightness(0.96);
+}
+
+.btn:active,
+.btn-primary:active,
+.cta:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.cta:focus-visible {
+  outline: 3px solid rgba(255, 224, 138, 0.5);
+  outline-offset: 2px;
+}
+
+.btn:disabled,
+.btn-primary:disabled,
+.cta:disabled,
+.btn[aria-busy="true"],
+.btn-primary[aria-busy="true"],
+.cta[aria-busy="true"] {
+  opacity: 0.7;
+  cursor: not-allowed;
+  filter: saturate(0.9);
+}
+
+/* Optional ghost variant to match your dashboard .btn--ghost */
+.btn--ghost {
+  background: #fff;
+  color: var(--ink, #262626);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+}
+
+/* Keep your arrow icon sizing if you use it inside the button */
+.btn .arrow,
+.btn-primary .arrow,
+.cta .arrow {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* Tighter buttons on very small screens */
+@media (max-width: 640px) {
+  .btn,
+  .btn-primary,
+  .cta {
+    padding: 0.65rem 0.95rem;
+    font-size: 0.9rem;
+  }
+}

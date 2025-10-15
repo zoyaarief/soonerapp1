@@ -146,9 +146,6 @@ function makeCard(p) {
   div.innerHTML = `
     <div class="card-media">
       <img src="${p.heroImage || p.image || "./images/restaurant.jpg"}" alt="${p.name}">
-      <div class="card-actions">
-        ${heartButtonHTML(p._id)}
-      </div>
     </div>
     <div class="body">
       <h3>${p.name}</h3>
