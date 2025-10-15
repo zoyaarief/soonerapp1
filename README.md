@@ -6,6 +6,13 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
+**Deployed at:** https://sooner-x03x.onrender.com/
+**Video Demonstration:** https://www.loom.com/share/297eef346ad448bb9b5d812914b27fcb?sid=8caa79b2-6495-4f39-913a-7a84ab42fe9a
+**Google Slides:** https://docs.google.com/presentation/d/1cVWZcI5oWXF61Pi0T7_qGKIw4BhI1c3W64k8r-3LHjQ/edit?usp=sharing
+**Thumbnail:** https://raw.githubusercontent.com/Nandana-125/soonerapp1/refs/heads/main/thumbnail.jpg thumbnail link
+
+---
+
 ## Features (Customer‑facing)
 
 - Browse venues with **search & filters** (type, city, cuisine, rating).
