@@ -8,7 +8,8 @@ function qsa(sel) {
   return Array.from(document.querySelectorAll(sel));
 }
 
-const API_BASE = "http://localhost:3000";
+// const API_BASE = "http://localhost:3000";
+const API_BASE = window.location.origin;
 
 // Toast (optional UI)
 const toastEl = document.getElementById("toast");
