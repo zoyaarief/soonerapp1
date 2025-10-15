@@ -71,10 +71,5 @@ cards.forEach((card) => {
       updateProgress();
       start();
     }
-
-    // Redirect to Browse page if type is provided
-    /*if (type) {
-      window.location.href = `browse.html?type=${encodeURIComponent(type)}`;
-    }*/
   });
 });
