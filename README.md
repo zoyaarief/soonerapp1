@@ -190,7 +190,7 @@ Customer Password : test1234
 
  Deployment Link : 
  
- Video : 
+ Video Demo : https://www.loom.com/share/297eef346ad448bb9b5d812914b27fcb?sid=d133cf2b-47a8-468a-98e6-de5ce2487f77
 
  PPT : https://docs.google.com/presentation/d/1cVWZcI5oWXF61Pi0T7_qGKIw4BhI1c3W64k8r-3LHjQ/edit?slide=id.g38c488987de_0_1#slide=id.g38c488987de_0_1
  
