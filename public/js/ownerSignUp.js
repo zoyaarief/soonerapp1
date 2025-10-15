@@ -1,11 +1,11 @@
 // public/js/ownerSignUp.js
 
 // ===== API CONFIG =====
-const API_BASE = "http://localhost:3000";
-const FETCH_CREDENTIALS = "include";
+// const API_BASE = "http://localhost:3000";
+// const FETCH_CREDENTIALS = "include";
 
-// const API_BASE = window.location.origin;
-// const FETCH_CREDENTIALS = "same-origin";
+const API_BASE = window.location.origin;
+const FETCH_CREDENTIALS = "same-origin";
 
 // ===== STATE =====
 let role = "owner"; // "owner" | "customer"
