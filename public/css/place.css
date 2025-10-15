@@ -7,6 +7,7 @@
   --shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
   --lime: #ffe08a;
   --limeText: #101010;
+  --gallery-tile-min: clamp(160px, 22vw, 220px);
 }
 
 * {
@@ -146,18 +147,19 @@ body {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--gallery-tile-min), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--gallery-tile-min), 1fr)
+  );
+  gap: clamp(6px, 1.2vw, 12px); /* tighter, responsive gap */
 }
 
-/* Uniform, non-stretched tiles */
 .gallery-grid img {
   display: block;
-  width: 20%;
-  aspect-ratio: 2 / 3; /* use 1 / 1 for squares */
+  width: 100%; /* <-- was 20%, causing the big empty space */
+  aspect-ratio: 4 / 3; /* or 1 / 1 for squares */
   object-fit: cover;
   object-position: center;
-
   border-radius: 10px;
   background: #fff;
   border: 1px solid var(--stroke);

@@ -1002,7 +1002,52 @@ async function refreshMetrics() {
 //     }
 //   });
 // }
+
+// function bindUI() {
+//   qs("#enterBtn")?.addEventListener("click", () => {
+//     const el = qs("#people");
+//     let n = 2;
+//     if (el) n = Math.max(1, Math.min(12, Number(el.value || 2)));
+//     else {
+//       const inp = prompt("How many people in your party?", "2");
+//       if (inp === null) return;
+//       const k = Math.max(1, Math.min(12, Number(inp)));
+//       if (!Number.isFinite(k)) return;
+//       n = k;
+//     }
+//     joinQueue(n);
+//   });
+
+//   // 🔧 Missing before: wire up Cancel
+//   const cancelBtn = qs("#cancelBtn");
+//   cancelBtn?.addEventListener("click", async () => {
+//     cancelBtn.disabled = true;
+//     try {
+//       await cancelQueue();
+//     } finally {
+//       cancelBtn.disabled = false;
+//     }
+//   });
+
+//   // (optional) "I'm here" button
+//   qs("#arrivedBtn")?.addEventListener("click", arrived);
+
+//   const form = document.getElementById("reviewForm");
+//   form?.addEventListener("submit", async (e) => {
+//     e.preventDefault();
+//     // ... (unchanged)
+//   });
+// }
 function bindUI() {
+  // Make sure non-form buttons don't accidentally submit the review form
+  ["#enterBtn", "#cancelBtn", "#arrivedBtn"].forEach((sel) => {
+    const b = qs(sel);
+    if (b && (!b.getAttribute("type") || b.getAttribute("type") !== "button")) {
+      b.setAttribute("type", "button");
+    }
+  });
+
+  // ENTER
   qs("#enterBtn")?.addEventListener("click", () => {
     const el = qs("#people");
     let n = 2;
@@ -1017,7 +1062,7 @@ function bindUI() {
     joinQueue(n);
   });
 
-  // 🔧 Missing before: wire up Cancel
+  // CANCEL
   const cancelBtn = qs("#cancelBtn");
   cancelBtn?.addEventListener("click", async () => {
     cancelBtn.disabled = true;
@@ -1028,13 +1073,80 @@ function bindUI() {
     }
   });
 
-  // (optional) "I'm here" button
+  // ARRIVED
   qs("#arrivedBtn")?.addEventListener("click", arrived);
 
+  // POST / UPDATE REVIEW
   const form = document.getElementById("reviewForm");
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    // ... (unchanged)
+
+    const textEl = qs("#revText");
+    const ratingEl = qs("#revRating");
+    if (!textEl || !ratingEl) return;
+
+    const textV = (textEl.value || "").trim();
+    const ratingV = Number(ratingEl.value || 5);
+    if (!textV) {
+      toast("Write something first");
+      return;
+    }
+
+    try {
+      let r;
+      if (editingReviewId) {
+        // Edit existing review
+        r = await fetch(`/api/reviews/${encodeURIComponent(editingReviewId)}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating: ratingV, comments: textV }),
+        });
+
+        if (r.ok) {
+          toast("Review updated!");
+          editingReviewId = null;
+          textEl.value = "";
+          await loadReviews();
+          return;
+        }
+      } else {
+        // Create new review
+        r = await fetch(`/api/reviews/${encodeURIComponent(currentId)}`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            venueId: currentId,
+            rating: ratingV,
+            comments: textV,
+          }),
+        });
+
+        if (r.ok) {
+          textEl.value = "";
+          toast("Review posted!");
+          await loadReviews();
+          return;
+        }
+      }
+
+      // Handle non-OK responses
+      if (r && r.status === 401) {
+        const ret = encodeURIComponent(location.pathname + location.search);
+        location.href = `ownerSignUp.html?role=customer&mode=login&returnTo=${ret}`;
+        return;
+      }
+      let msg = "Failed to save review";
+      try {
+        const j = await r.json();
+        if (j?.error) msg += `: ${j.error}`;
+      } catch {}
+      toast(msg);
+    } catch (err) {
+      console.error("Review submit error:", err);
+      toast("Error posting review");
+    }
   });
 }
 

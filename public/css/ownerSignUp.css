@@ -146,8 +146,8 @@ body {
   font-weight: 700;
 }
 .tab.active {
-  background: #0c1534;
-  color: #fff;
+  background: #ffcf5a;
+  color: #030303;
   outline: 1px solid var(--stroke);
 }
 
