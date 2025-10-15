@@ -385,51 +385,6 @@ function addToUndoStack(item) {
   );
 }
 
-/*function renderQueue() {
-  if (!queueList) return;
-  queueList.innerHTML = "";
-
-  if (!settings.queueActive) {
-    queueList.innerHTML =
-      "<p style='color:#ef4444'>Queue stopped for the day.</p>";
-    updateMetrics();
-    drawChart();
-    return;
-  }
-
-  const totalSeats = Number(capacity.totalSeats || 0);
-
-  // Only render the parties that fit entirely into totalSeats (cumulative)
-  const visible = visibleQueueByCapacity(queue, totalSeats);
-  const hiddenCount = Math.max(queue.length - visible.length, 0);
-
-  if (!visible.length) {
-    queueList.innerHTML =
-      "<p style='color:#6B7280'>No one currently in queue.</p>";
-  } else {
-    visible.forEach((q) => {
-      const row = document.createElement("div");
-      row.className = "queue-item";
-      row.innerHTML = `
-        <span>${q.position}. ${q.name} (${q.people} people)</span>
-        <input type="checkbox" class="checkbox" data-id="${q._id}" aria-label="Mark served">
-      `;
-      queueList.appendChild(row);
-    });
-
-    if (hiddenCount > 0) {
-      const more = document.createElement("div");
-      more.className = "meta";
-      more.style.cssText = "color:#6B7280;margin-top:8px;";
-      more.textContent = `…and ${hiddenCount} more waiting`;
-      queueList.appendChild(more);
-    }
-  }
-
-  updateMetrics();
-  drawChart();
-}*/
-
 function renderQueue() {
   if (!queueList) return;
   queueList.innerHTML = "";
