@@ -6,19 +6,17 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## ✨ Features (Customer‑facing)
+## Features (Customer‑facing)
 
 - Browse venues with **search & filters** (type, city, cuisine, rating).
-- **Place page** with live stats: number in queue, approx wait, your position, seats left, status (“Open/Closed”), gallery, announcements, features, hours.
-- **Join queue** with robust rules (venue open, walk‑ins enabled, queue active, capacity available, max party size).
-- **Cancel queue** (idempotent) and **“I’m here”** to pause the near‑turn timer.
+- **Place page** with live stats: number in queue, approx wait, your position, seats left, status (“Open/Closed”), gallery, features, hours.
+- **Join queue** with robust rules (venue open, walk‑ins enabled capacity available, max party size).
+- **Cancel queue** (idempotent) the near‑turn timer.
 - **45‑minute timer** that **starts at position ≤ 5**, persists across reloads, and pauses on arrival.
 - **User dashboard** shows **Active Queue** and **Venues for Today** (favorites + recents; hides sections when empty).
-- **Ratings & reviews** (only after “served”); shows latest reviews per venue.
-- **Announcements**: venue broadcasts (offers/notices) displayed on the place page.
-- **Favorites**: like/unlike venues from cards.
+- **Ratings & reviews** ; shows latest reviews per venue.
 
-## ✨ Features (Owner‑facing – handled by teammate)
+## Features (Owner‑facing – handled by teammate)
 
 - Owner signup/login, profile, gallery management.
 - Owner settings: `openStatus`, `walkinsEnabled`, `queueActive`, `totalSeats`, `avgWaitMins`, `maxBooking`.
@@ -27,7 +25,7 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## 🗂️ Tech Stack
+## Tech Stack
 
 - **Backend:** Node.js, Express, MongoDB (Atlas).
 - **Frontend:** Vanilla JavaScript (ES Modules), HTML, CSS (modular files per page).
@@ -37,7 +35,7 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## 📁 Project Structure (key parts)
+## Project Structure (key parts)
 
 ```
 server/
@@ -81,7 +79,7 @@ public/
 
 ---
 
-## 🛣️ Key API Endpoints (Customer‑relevant)
+## Key API Endpoints (Customer‑relevant)
 
 - `GET /api/owners/public`
 - `GET /api/owners/public/:id`
@@ -95,7 +93,7 @@ public/
 
 ---
 
-## 🧠 Queue Rules (Customer join)
+## Queue Rules (Customer join)
 
 - Venue must be **open**, **walk‑ins enabled**, **queue active**.
 - **Capacity**: `owner_settings.totalSeats` must have enough spots left (sum of active `partySize`).
@@ -105,7 +103,7 @@ public/
 
 ---
 
-## ⏱️ 45‑Minute Near‑Turn Timer
+##  45‑Minute Near‑Turn Timer
 
 - Starts automatically the first time **position ≤ 5**.
 - Persisted in `localStorage` per venue; survives polling/reloads.
@@ -114,7 +112,7 @@ public/
 
 ---
 
-## 🔐 Environment
+## Environment
 
 Create `.env` in project root:
 
@@ -129,7 +127,7 @@ NODE_ENV=development
 
 ---
 
-## ▶️ Run Locally
+## Run Locally
 
 ```bash
 npm install
@@ -140,7 +138,7 @@ npm start         # node server/server.js
 
 ---
 
-## ✅ Rubric Mapping
+##  Rubric Mapping
 
 - **Project description:** See top.
 - **Personas & Stories:** See `DESIGN.md`.
@@ -181,6 +179,6 @@ npm start         # node server/server.js
 
 ---
 
-## 📜 License
+## License
 
 MIT — see `LICENSE`.
