@@ -6,28 +6,26 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## ✨ Features (Customer‑facing)
+## Features (Customer‑facing)
 
 - Browse venues with **search & filters** (type, city, cuisine, rating).
-- **Place page** with live stats: number in queue, approx wait, your position, seats left, status (“Open/Closed”), gallery, announcements, features, hours.
-- **Join queue** with robust rules (venue open, walk‑ins enabled, queue active, capacity available, max party size).
-- **Cancel queue** (idempotent) and **“I’m here”** to pause the near‑turn timer.
+- **Place page** with live stats: number in queue, approx wait, your position, seats left, status (“Open/Closed”), gallery, features, hours.
+- **Join queue** with robust rules (venue open, walk‑ins enabled capacity available, max party size).
+- **Cancel queue** (idempotent) the near‑turn timer.
 - **45‑minute timer** that **starts at position ≤ 5**, persists across reloads, and pauses on arrival.
 - **User dashboard** shows **Active Queue** and **Venues for Today** (favorites + recents; hides sections when empty).
-- **Ratings & reviews** (only after “served”); shows latest reviews per venue.
-- **Announcements**: venue broadcasts (offers/notices) displayed on the place page.
-- **Favorites**: like/unlike venues from cards.
+- **Ratings & reviews** ; shows latest reviews per venue.
 
-## ✨ Features (Owner‑facing – handled by teammate)
+## Features (Owner‑facing – handled by teammate)
 
 - Owner signup/login, profile, gallery management.
-- Owner settings: `openStatus`, `walkinsEnabled`, `queueActive`, `totalSeats`, `avgWaitMins`, `maxBooking`.
-- Queue operations: serve, cancel, mark no‑shows, post announcements.
+- Owner settings:  `walkinsEnabled`, `totalSeats`, `avgWaitMins`, `maxBooking`.
+- Queue operations: serve, cancel post announcements.
 - Dashboard to watch live queue & control parameters.
 
 ---
 
-## 🗂️ Tech Stack
+## Tech Stack
 
 - **Backend:** Node.js, Express, MongoDB (Atlas).
 - **Frontend:** Vanilla JavaScript (ES Modules), HTML, CSS (modular files per page).
@@ -37,7 +35,7 @@ Sooner is a Node.js + Express + Vanilla JS web app that lets **walk‑in custome
 
 ---
 
-## 📁 Project Structure (key parts)
+## Project Structure (key parts)
 
 ```
 server/
@@ -81,7 +79,7 @@ public/
 
 ---
 
-## 🛣️ Key API Endpoints (Customer‑relevant)
+## Key API Endpoints (Customer‑relevant)
 
 - `GET /api/owners/public`
 - `GET /api/owners/public/:id`
@@ -95,7 +93,7 @@ public/
 
 ---
 
-## 🧠 Queue Rules (Customer join)
+## Queue Rules (Customer join)
 
 - Venue must be **open**, **walk‑ins enabled**, **queue active**.
 - **Capacity**: `owner_settings.totalSeats` must have enough spots left (sum of active `partySize`).
@@ -105,7 +103,7 @@ public/
 
 ---
 
-## ⏱️ 45‑Minute Near‑Turn Timer
+##  45‑Minute Near‑Turn Timer
 
 - Starts automatically the first time **position ≤ 5**.
 - Persisted in `localStorage` per venue; survives polling/reloads.
@@ -114,7 +112,7 @@ public/
 
 ---
 
-## 🔐 Environment
+## Environment
 
 Create `.env` in project root:
 
@@ -129,7 +127,7 @@ NODE_ENV=development
 
 ---
 
-## ▶️ Run Locally
+## Run Locally
 
 ```bash
 npm install
@@ -140,7 +138,69 @@ npm start         # node server/server.js
 
 ---
 
-## ✅ Rubric Mapping
+## Credentials to test the site without creating a new account 
+Owner email : owner.demo@sooner.test
+Owner password : OwnerTest!234
+
+Customer email : jeishu@example.com
+Customer Password : test1234
+
+
+## Screenshots 
+# 1. Flashscreen 
+
+<img width="1701" height="931" alt="Screenshot 2025-10-15 at 12 44 18 AM" src="https://github.com/user-attachments/assets/ea09c880-2517-48a1-bf56-6e40b2cadd54" />
+
+# 2. Customer/Owner Login
+
+<img width="1698" height="919" alt="Screenshot 2025-10-15 at 12 44 43 AM" src="https://github.com/user-attachments/assets/ca3f4011-110d-44d8-8571-b8c248c4dcd9" />
+
+# 3. Customer/Owner Sign Up 
+
+<img width="1709" height="915" alt="Screenshot 2025-10-15 at 12 45 10 AM" src="https://github.com/user-attachments/assets/b8c4790a-c69e-414c-9b28-61ba7c7e82d3" />
+
+# 4. Owner Profile 
+
+<img width="1703" height="936" alt="Screenshot 2025-10-15 at 12 47 43 AM" src="https://github.com/user-attachments/assets/427afa98-aa5c-44e0-8cee-39ca5d6cc939" />
+
+# 5. Owner Dashboard
+
+<img width="1700" height="928" alt="Screenshot 2025-10-15 at 12 48 00 AM" src="https://github.com/user-attachments/assets/4551eaea-0411-41ef-9d8a-bd6f00d00635" />
+<img width="1707" height="931" alt="Screenshot 2025-10-15 at 12 48 58 AM" src="https://github.com/user-attachments/assets/15a26af3-8271-4846-8048-6992aceaa814" />
+<img width="1705" height="936" alt="Screenshot 2025-10-15 at 12 49 44 AM" src="https://github.com/user-attachments/assets/c8568e7e-88c8-4486-8295-e4f777fc67a5" />
+
+# 6. Customer Home 
+
+<img width="1710" height="937" alt="Screenshot 2025-10-15 at 12 50 43 AM" src="https://github.com/user-attachments/assets/956efc99-ade7-445a-8b7e-2d01f4469098" />
+
+# 7. Customer Browse 
+
+<img width="1710" height="930" alt="Screenshot 2025-10-15 at 12 51 05 AM" src="https://github.com/user-attachments/assets/0d6f85ee-7756-43fb-a76e-8a6c905276cd" />
+
+# 8. Customer join Queue 
+
+<img width="1706" height="932" alt="Screenshot 2025-10-15 at 12 51 37 AM" src="https://github.com/user-attachments/assets/54703b88-c91f-4183-808c-b934e2252a8f" />
+<img width="1699" height="932" alt="Screenshot 2025-10-15 at 12 51 54 AM" src="https://github.com/user-attachments/assets/6fd96035-1316-4adf-be90-6b8460575c8c" />
+
+# 8. Customer Ratings and Reviews 
+
+ <img width="1709" height="935" alt="Screenshot 2025-10-15 at 12 52 30 AM" src="https://github.com/user-attachments/assets/74dc2c92-48f5-4ea6-9ec1-0dda48a7f03d" />
+
+ ## Links 
+
+ Deployment Link : 
+ 
+ Video : 
+
+ PPT : https://docs.google.com/presentation/d/1cVWZcI5oWXF61Pi0T7_qGKIw4BhI1c3W64k8r-3LHjQ/edit?slide=id.g38c488987de_0_1#slide=id.g38c488987de_0_1
+ 
+ Design Document : `DESIGN.md`
+
+## Author 
+- 1. Nandana Pradeep - pradeep.na@northeastern.edu
+- 2. Piriyajeishree Murali Naidu - muralinaidu.p@northeastern.edu
+
+##  Rubric Mapping
 
 - **Project description:** See top.
 - **Personas & Stories:** See `DESIGN.md`.
@@ -181,6 +241,7 @@ npm start         # node server/server.js
 
 ---
 
-## 📜 License
+
+## License
 
 MIT — see `LICENSE`.
