@@ -1,7 +1,10 @@
 // public/js/ownerProfile.js
 
-const API_BASE = "http://localhost:3000";
-const FETCH_CREDENTIALS = "include";
+// const API_BASE = "http://localhost:3000";
+// const FETCH_CREDENTIALS = "include";
+
+const API_BASE = window.location.origin;
+const FETCH_CREDENTIALS = "same-origin";
 
 // Auth guard
 (async function guard() {
